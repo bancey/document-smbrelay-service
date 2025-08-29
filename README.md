@@ -101,4 +101,33 @@ Notes and recommendations
 - Use a secrets manager or Docker secrets to inject `SMB_USERNAME`/`SMB_PASSWORD` securely.
 - If you require atomic replaces to avoid partial writes during overwrite, consider enabling the "safe rename" behavior (write to a temp filename on the share then atomically rename). I can implement that if desired.
 
-If you'd like, I can add a `docker-compose.yml`, a health/readiness endpoint, or API key protection next.
+## Testing
+
+The service includes a comprehensive test suite with both unit and integration tests.
+
+**Run all tests:**
+```bash
+./run_tests.sh
+```
+
+**Run only unit tests (fast, no external dependencies):**
+```bash
+./run_tests.sh unit
+```
+
+**Run integration tests (requires Docker):**
+```bash
+./run_tests.sh integration
+```
+
+See `tests/README.md` for detailed testing documentation.
+
+## Test Coverage
+
+- ✅ File upload and SMB connectivity
+- ✅ Environment variable validation  
+- ✅ Error handling and edge cases
+- ✅ Directory creation and path handling
+- ✅ Overwrite protection
+- ✅ Temporary file cleanup
+- ✅ End-to-end integration with real SMB server
