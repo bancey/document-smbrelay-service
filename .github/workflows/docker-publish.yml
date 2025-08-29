@@ -41,8 +41,10 @@ jobs:
           tags: |
             # set latest tag for default branch
             type=raw,value=latest,enable={{is_default_branch}}
-            # set commit SHA for all builds
-            type=sha,prefix={{branch}}-
+            # set commit SHA with branch prefix for branch builds
+            type=ref,event=branch,suffix=-{{sha}}
+            # set commit SHA with pr prefix for PR builds  
+            type=ref,event=pr,suffix=-{{sha}}
             # set pr-<number> for pull requests
             type=ref,event=pr,prefix=pr-
             # set branch name for non-main branches
