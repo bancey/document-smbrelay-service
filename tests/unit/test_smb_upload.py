@@ -242,5 +242,9 @@ class TestSMBUploadFile:
                 password="testpass"
             )
 
-        # File upload should still be attempted
-        mock_conn.storeFile.assert_called_once()
+        # File upload should still be attempted (might be called multiple times for directory creation)
+        assert mock_conn.storeFile.call_count >= 1
+        # Verify the actual file upload was called
+        actual_file_calls = [call for call in mock_conn.storeFile.call_args_list 
+                           if call[0][1] == "restricted/file.txt"]
+        assert len(actual_file_calls) == 1

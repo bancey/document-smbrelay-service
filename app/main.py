@@ -43,21 +43,43 @@ def smb_upload_file(
     if not connected:
         raise ConnectionError("Could not connect to SMB server")
 
-    # ensure directories by creating empty file then moving? pysmb doesn't have a direct mkdirs for nested paths.
-    # We'll create directories one by one using storeFile on folder placeholders (SMB requires ops per server implementation).
+    # Create directories one by one for nested paths
     if remote_dir:
         parts = [p for p in remote_dir.split("/") if p]
         cur = ""
         for part in parts:
             cur = f"{cur}/{part}" if cur else part
+            
+            # First check if directory already exists
+            directory_exists = False
             try:
                 conn.listPath(share_name, cur)
+                directory_exists = True
             except Exception:
+                directory_exists = False
+            
+            # If directory doesn't exist, try to create it
+            if not directory_exists:
                 try:
                     conn.createDirectory(share_name, cur)
-                except Exception:
-                    # ignore if cannot create (permissions or exists race)
-                    pass
+                except Exception as create_error:
+                    # Directory creation failed - try alternative method
+                    # Some SMB implementations are flaky with createDirectory
+                    # Try creating a dummy file to force directory creation
+                    try:
+                        dummy_path = f"{cur}/.dummy_file_for_dir_creation"
+                        import io
+                        dummy_content = io.BytesIO(b"temp")
+                        conn.storeFile(share_name, dummy_path, dummy_content)
+                        # Try to delete the dummy file
+                        try:
+                            conn.deleteFiles(share_name, dummy_path)
+                        except Exception:
+                            pass  # Ignore deletion errors
+                    except Exception:
+                        # Both methods failed - directory creation might not be supported
+                        # Continue anyway as the upload might still work
+                        pass
 
     # If not allowed to overwrite, check if file exists first
     if not overwrite:
@@ -72,7 +94,18 @@ def smb_upload_file(
             raise FileExistsError(f"Remote file already exists: {remote_path}")
 
     with open(local_path, "rb") as file_obj:
-        conn.storeFile(share_name, remote_path, file_obj)
+        try:
+            conn.storeFile(share_name, remote_path, file_obj)
+        except Exception as store_error:
+            # If storeFile fails and we have nested directories, it might be because
+            # the directory creation failed silently. Let's provide a better error message.
+            if remote_dir and ("unable to open" in str(store_error).lower() or 
+                             "no such file" in str(store_error).lower() or
+                             "path not found" in str(store_error).lower()):
+                raise ConnectionError(f"Failed to store {remote_path} on {share_name}: "
+                                    f"Directory path may not exist. Original error: {store_error}")
+            else:
+                raise ConnectionError(f"Failed to store {remote_path} on {share_name}: {store_error}")
 
     conn.close()
 
