@@ -18,6 +18,26 @@ jobs:
     permissions:
       contents: read
 
+    services:
+      samba:
+        image: dperson/samba:latest
+        env:
+          USER: testuser;testpass
+          SHARE: testshare;/mnt/testshare;yes;no;no;testuser
+          SMB: true
+          NMBD: true
+        ports:
+          - 1445:445
+          - 1137:137
+          - 1138:138  
+          - 1139:139
+        options: >-
+          --health-cmd "smbclient -L localhost -U testuser%testpass"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          --health-start-period 30s
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -49,10 +69,11 @@ jobs:
       - name: Run unit tests
         run: python -m pytest -m unit --tb=short
 
-      - name: Run integration tests (optional)
-        run: |
-          echo "Running integration tests (these may fail in some CI environments due to Docker networking)"
-          python -m pytest -m integration --tb=short || echo "Integration tests failed - this is acceptable in CI environments"
+      - name: Run integration tests
+        env:
+          CI_SMB_PORT: 1445
+          CI_SMB_SERVER_IP: localhost
+        run: python -m pytest -m integration --tb=short
 
   build-and-push:
     runs-on: ubuntu-latest

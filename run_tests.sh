@@ -33,28 +33,28 @@ case "${1:-all}" in
         run_tests "unit" "-m unit"
         ;;
     "integration")
-        echo "⚠️  Integration tests require Docker to be running"
-        echo "Docker will be used to start an SMB server for testing"
-        read -p "Continue? (y/N): " -n 1 -r
-        echo
-        if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if [[ -n "$CI_SMB_PORT" ]]; then
+            echo "🔧 Running integration tests in CI environment (port: $CI_SMB_PORT)"
             run_tests "integration" "-m integration"
         else
-            echo "Integration tests skipped"
+            echo "⚠️  Integration tests in local environment require CI setup"
+            echo "For local testing, use GitHub Actions or set up SMB server manually"
+            echo "To run in CI: set CI_SMB_PORT and CI_SMB_SERVER_IP environment variables"
+            echo
+            echo "Skipping integration tests in local environment"
+            exit 0
         fi
         ;;
     "all")
         # Run unit tests first
         if run_tests "unit" "-m unit"; then
             echo
-            echo "⚠️  Integration tests require Docker to be running"
-            echo "Docker will be used to start an SMB server for testing"
-            read -p "Run integration tests? (y/N): " -n 1 -r
-            echo
-            if [[ $REPLY =~ ^[Yy]$ ]]; then
+            if [[ -n "$CI_SMB_PORT" ]]; then
+                echo "🔧 Running integration tests in CI environment"
                 run_tests "integration" "-m integration"
             else
-                echo "Integration tests skipped"
+                echo "⚠️  Integration tests skipped - not in CI environment"
+                echo "Integration tests require GitHub Actions services or manual SMB setup"
             fi
         fi
         ;;
@@ -63,14 +63,21 @@ case "${1:-all}" in
         echo
         echo "Options:"
         echo "  unit         Run only unit tests (fast, no external dependencies)"
-        echo "  integration  Run only integration tests (requires Docker)"
+        echo "  integration  Run only integration tests (requires CI environment)"
         echo "  all          Run all tests (default)"
         echo "  help         Show this help message"
+        echo
+        echo "Environment:"
+        echo "  CI_SMB_PORT       SMB server port in CI environment"
+        echo "  CI_SMB_SERVER_IP  SMB server IP in CI environment"
         echo
         echo "Examples:"
         echo "  $0           # Run all tests"
         echo "  $0 unit      # Run only unit tests"
-        echo "  $0 integration  # Run only integration tests"
+        echo "  $0 integration  # Run integration tests (CI only)"
+        echo
+        echo "Note: Integration tests are designed for CI environments with"
+        echo "      GitHub Actions services and will skip in local development."
         exit 0
         ;;
     *)
