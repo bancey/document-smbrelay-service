@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, patch
 from app.main import save_upload_to_temp
 
 
-import pytest
 
 
 @pytest.mark.unit
