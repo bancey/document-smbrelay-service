@@ -61,6 +61,14 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-test.txt
 
+      - name: Fix Samba permissions for integration tests
+        run: |
+          # Wait for Samba service to be ready
+          sleep 10
+          # Fix the share directory permissions so that the SMB user can create directories
+          docker exec $(docker ps --filter "ancestor=dperson/samba:latest" --format "{{.ID}}") chown smbuser:smb /mnt/testshare
+          docker exec $(docker ps --filter "ancestor=dperson/samba:latest" --format "{{.ID}}") chmod 775 /mnt/testshare
+
       - name: Validate code syntax
         run: |
           python -m py_compile app/main.py

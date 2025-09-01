@@ -46,40 +46,32 @@ def smb_upload_file(
     # Create directories one by one for nested paths
     if remote_dir:
         parts = [p for p in remote_dir.split("/") if p]
-        cur = ""
+        
+        # Build directory path incrementally and ensure each level exists
+        current_path = ""
         for part in parts:
-            cur = f"{cur}/{part}" if cur else part
+            current_path = f"{current_path}/{part}" if current_path else part
             
-            # First check if directory already exists
+            # Check if directory exists
             directory_exists = False
             try:
-                conn.listPath(share_name, cur)
+                # Try to list the directory - if this succeeds, directory exists
+                conn.listPath(share_name, current_path)
                 directory_exists = True
             except Exception:
+                # Directory doesn't exist or we don't have permission to list it
                 directory_exists = False
             
-            # If directory doesn't exist, try to create it
+            # If directory doesn't exist, create it
             if not directory_exists:
                 try:
-                    conn.createDirectory(share_name, cur)
-                except Exception as create_error:
-                    # Directory creation failed - try alternative method
-                    # Some SMB implementations are flaky with createDirectory
-                    # Try creating a dummy file to force directory creation
-                    try:
-                        dummy_path = f"{cur}/.dummy_file_for_dir_creation"
-                        import io
-                        dummy_content = io.BytesIO(b"temp")
-                        conn.storeFile(share_name, dummy_path, dummy_content)
-                        # Try to delete the dummy file
-                        try:
-                            conn.deleteFiles(share_name, dummy_path)
-                        except Exception:
-                            pass  # Ignore deletion errors
-                    except Exception:
-                        # Both methods failed - directory creation might not be supported
-                        # Continue anyway as the upload might still work
-                        pass
+                    conn.createDirectory(share_name, current_path)
+                except Exception:
+                    # createDirectory failed - this is common with some SMB servers
+                    # Continue without error as some servers auto-create directories
+                    # during file upload, or the directory might already exist but
+                    # not be listable due to permissions
+                    pass
 
     # If not allowed to overwrite, check if file exists first
     if not overwrite:
