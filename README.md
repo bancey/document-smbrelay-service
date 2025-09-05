@@ -131,3 +131,7 @@ See `tests/README.md` for detailed testing documentation.
 - ✅ Overwrite protection
 - ✅ Temporary file cleanup
 - ✅ End-to-end integration with real SMB server
+
+The test suite achieves 93% code coverage and includes both unit tests (fast, no external dependencies) and integration tests (with real SMB server via Docker).
+
+**Code Quality**: This project uses SonarCloud for automated code quality analysis and coverage reporting on all pull requests.
