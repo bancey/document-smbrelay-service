@@ -309,3 +309,23 @@ class TestUploadEndpoint:
         assert response.status_code == 500
         # Temporary file should still be removed
         mock_remove.assert_called_once()
+
+    def test_temp_file_cleanup_remove_raises_is_swallowed(self, client, smb_env_vars):
+        """If os.remove raises during cleanup it should be swallowed and not affect response."""
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+
+        test_file = io.BytesIO(b"test content")
+
+        # Patch smb_upload_file to succeed, and os.remove to raise
+        with patch('app.main.smb_upload_file'):
+            with patch('app.main.os.remove', side_effect=Exception('remove failed')) as mock_remove:
+                response = client.post(
+                    "/upload",
+                    files={"file": ("test.txt", test_file, "text/plain")},
+                    data={"remote_path": "test.txt"}
+                )
+
+        # Endpoint should still return success even if remove failed
+        assert response.status_code == 200
+        mock_remove.assert_called_once()

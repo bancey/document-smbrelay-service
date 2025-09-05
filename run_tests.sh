@@ -9,6 +9,16 @@ export PATH="$HOME/.local/bin:$PATH"
 echo "🧪 Document SMB Relay Service Test Suite"
 echo "========================================"
 
+# Prefer `python`, fall back to `python3`
+if command -v python >/dev/null 2>&1; then
+    PYTHON=python
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON=python3
+else
+    echo "❌ Neither 'python' nor 'python3' is available on PATH."
+    exit 1
+fi
+
 # Function to run tests with error handling
 run_tests() {
     local test_type="$1"
@@ -16,9 +26,9 @@ run_tests() {
     
     echo
     echo "🔧 Running $test_type tests..."
-    echo "Command: python -m pytest $test_args"
+    echo "Command: $PYTHON -m pytest $test_args"
     
-    if python -m pytest $test_args; then
+    if $PYTHON -m pytest $test_args; then
         echo "✅ $test_type tests passed!"
         return 0
     else
