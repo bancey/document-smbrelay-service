@@ -250,9 +250,7 @@ async def health():
         )
 
     # Test SMB connectivity
-    loop = asyncio.get_event_loop()
-    smb_health = await loop.run_in_executor(
-        None,
+    smb_health = await asyncio.to_thread(
         check_smb_health,
         config["server_name"],
         config["server_ip"],
@@ -293,9 +291,7 @@ async def upload(
 
     tmp_path = await save_upload_to_temp(file)
     try:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None,
+        await asyncio.to_thread(
             smb_upload_file,
             tmp_path,
             config["server_name"],
