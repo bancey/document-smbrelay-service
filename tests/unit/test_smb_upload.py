@@ -248,3 +248,49 @@ class TestSMBUploadFile:
         actual_file_calls = [call for call in mock_conn.storeFile.call_args_list 
                            if call[0][1] == "restricted/file.txt"]
         assert len(actual_file_calls) == 1
+
+    def test_smb_upload_file_storefile_path_error(self, temp_file):
+        """When storeFile raises a path-related error, a ConnectionError explains directory may not exist."""
+        mock_conn = Mock()
+        mock_conn.connect.return_value = True
+        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
+        # Simulate storeFile raising a path-related error
+        mock_conn.storeFile.side_effect = Exception("[Errno 2] No such file or directory: 'path not found'")
+        mock_conn.close.return_value = None
+
+        with patch('app.main.SMBConnection', return_value=mock_conn):
+            with pytest.raises(ConnectionError) as exc:
+                smb_upload_file(
+                    local_path=temp_file,
+                    server_name="testserver",
+                    server_ip="127.0.0.1",
+                    share_name="testshare",
+                    remote_path="subdir/file.txt",
+                    username="testuser",
+                    password="testpass",
+                )
+
+        assert "Directory path may not exist" in str(exc.value)
+
+    def test_smb_upload_file_storefile_generic_error(self, temp_file):
+        """When storeFile raises a generic error, a ConnectionError with original error is raised."""
+        mock_conn = Mock()
+        mock_conn.connect.return_value = True
+        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
+        # Simulate storeFile raising a generic error
+        mock_conn.storeFile.side_effect = Exception("Unexpected failure during write")
+        mock_conn.close.return_value = None
+
+        with patch('app.main.SMBConnection', return_value=mock_conn):
+            with pytest.raises(ConnectionError) as exc:
+                smb_upload_file(
+                    local_path=temp_file,
+                    server_name="testserver",
+                    server_ip="127.0.0.1",
+                    share_name="testshare",
+                    remote_path="subdir/file.txt",
+                    username="testuser",
+                    password="testpass",
+                )
+
+        assert "Unexpected failure during write" in str(exc.value)
