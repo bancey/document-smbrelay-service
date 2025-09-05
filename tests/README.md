@@ -30,141 +30,103 @@ Fast tests that use mocks and don't require external dependencies:
 
 ### Integration Tests (`tests/integration/`)
 End-to-end tests using a real SMB server via Docker:
+# Testing Documentation
 
-- **`test_smb_integration.py`** - Complete workflow tests
-  - Real SMB server upload/download
-  - Directory creation verification  
-  - Overwrite behavior testing
-  - Large file transfers
-  - FastAPI endpoint integration
+This document describes how to run and reason about the project's test suite.
 
-## Running Tests
+## Test layout
 
-### Prerequisites
+- `tests/unit/` — unit tests that mock external systems and run fast
+- `tests/integration/` — end-to-end tests using a real SMB server (Docker)
 
-**For Unit Tests:**
-- Python 3.10+
-- Test dependencies: `pip install -r requirements-test.txt`
+Key test files:
+- `tests/unit/test_file_utils.py` — temporary-file and upload-to-temp behavior
+- `tests/unit/test_smb_upload.py` — SMB upload logic, directory creation, overwrite
+- `tests/unit/test_endpoints.py` — FastAPI `/upload` endpoint behavior
+- `tests/integration/test_smb_integration.py` — end-to-end SMB server tests
 
-**For Integration Tests:**
-- Docker and Docker Compose
-- Available ports 445, 137-139 for SMB server
+## Prerequisites
 
-### Test Commands
+- Python 3.10+ (3.12+ recommended)
+- Install runtime deps: `pip install -r requirements.txt`
+- Install test deps: `pip install -r requirements-test.txt`
 
-**Run all tests:**
+Integration tests additionally require:
+- Docker (and Docker Compose if preferred)
+- Ports available for SMB (typically `445`, and optionally `137-139` for NetBIOS)
+
+If Docker is not available, integration tests can be skipped — unit tests cover core logic.
+
+## Useful commands
+
+- Run all tests:
+
 ```bash
 ./run_tests.sh
 ```
 
-**Run only unit tests (fast):**
+- Run only unit tests (fast):
+
 ```bash
 ./run_tests.sh unit
 # or
-python -m pytest -m unit
+python -m pytest -m unit -q
 ```
 
-**Run only integration tests:**
+- Run only integration tests (requires Docker):
+
 ```bash
-./run_tests.sh integration  
+./run_tests.sh integration
 # or
-python -m pytest -m integration
+python -m pytest -m integration -q
 ```
 
-**Run with verbose output:**
+- Run a single test file:
+
+```bash
+python -m pytest tests/unit/test_endpoints.py -q
+```
+
+- Run with verbose output:
+
 ```bash
 python -m pytest -v
 ```
 
-**Run specific test file:**
-```bash
-python -m pytest tests/unit/test_endpoints.py -v
-```
+## Integration test details
 
-### Test Coverage
+The integration suite automatically starts a disposable SMB server inside Docker using test credentials and a temporary data volume. Tests verify:
+- real SMB uploads and downloads
+- directory creation on the share
+- overwrite behavior and conflict handling
 
-The test suite provides comprehensive coverage of:
+Integration server defaults used by the tests:
+- Username: `testuser`
+- Password: `testpass`
+- Share name: `testshare`
 
-- ✅ File upload functionality
-- ✅ SMB connection and authentication  
-- ✅ Directory creation logic
-- ✅ Overwrite protection
-- ✅ Error handling and edge cases
-- ✅ Environment variable parsing
-- ✅ Temporary file management
-- ✅ Path normalization
-- ✅ Large file handling
-- ✅ End-to-end API workflow
+The test harness cleans up any temporary containers and volumes after the tests complete.
 
-## Integration Test Details
+## Test coverage and focus
 
-### SMB Server Setup
+The suite focuses on:
+- File upload and temporary-file handling
+- SMB connection/authentication and write logic
+- Directory creation and path normalization
+- Overwrite protection and conflict handling
+- Error propagation from SMB layer to HTTP responses
 
-Integration tests automatically start a Docker-based SMB server with:
-- **Username:** `testuser`
-- **Password:** `testpass`  
-- **Share name:** `testshare`
-- **Ports:** 445, 137-139
+Unit tests mock `pysmb` interactions so they run quickly and deterministically.
 
-The server uses a temporary Docker volume that's cleaned up after tests.
+## Adding tests
 
-### Test Data
+Guidance when adding tests:
+1. Add unit tests first and mock external dependencies.
+2. Add integration tests only when the behavior requires a real SMB server.
+3. Use markers `@pytest.mark.unit` and `@pytest.mark.integration`.
+4. Keep tests isolated and ensure resources are cleaned up.
 
-- Test files range from empty to 1MB in size
-- Various file extensions are tested (.txt, .pdf, .bin, etc.)
-- Nested directory structures up to 3 levels deep
-- Unicode and special characters in filenames
+## Troubleshooting
 
-### Error Scenarios
-
-Integration tests verify proper handling of:
-- Connection failures
-- Authentication errors
-- Permission denied scenarios
-- Disk space limitations
-- Network timeouts
-
-## Test Configuration
-
-Configuration is managed through:
-- **`pytest.ini`** - Pytest settings and markers
-- **`tests/conftest.py`** - Shared fixtures and test utilities
-- **`docker-compose.test.yml`** - SMB server for integration tests
-
-## Continuous Integration
-
-The test suite is designed to work in CI environments:
-- Unit tests run without external dependencies
-- Integration tests can be skipped if Docker is unavailable  
-- All tests use temporary files and clean up after themselves
-- Test results are formatted for CI parsing
-
-## Adding New Tests
-
-When adding new functionality:
-
-1. **Add unit tests first** - Fast feedback during development
-2. **Mock external dependencies** - Keep unit tests isolated
-3. **Add integration tests** - Verify real-world scenarios
-4. **Use appropriate markers** - `@pytest.mark.unit` or `@pytest.mark.integration`
-5. **Clean up resources** - Remove test files and connections
-
-### Example Test Structure
-
-```python
-@pytest.mark.unit
-class TestNewFeature:
-    def test_basic_functionality(self):
-        # Test with mocks
-        pass
-    
-    def test_error_handling(self):
-        # Test error scenarios
-        pass
-
-@pytest.mark.integration  
-class TestNewFeatureIntegration:
-    def test_end_to_end(self, smb_server):
-        # Test with real SMB server
-        pass
-```
+- If integration tests fail with network/port errors, ensure Docker can bind the SMB ports on your host.
+- If tests can't import the app, confirm `python3 -m py_compile app/main.py` and `python3 -c "import app.main"` succeed.
