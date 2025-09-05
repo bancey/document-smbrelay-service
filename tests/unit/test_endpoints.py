@@ -329,3 +329,184 @@ class TestUploadEndpoint:
         # Endpoint should still return success even if remove failed
         assert response.status_code == 200
         mock_remove.assert_called_once()
+
+
+@pytest.mark.unit
+class TestHealthEndpoint:
+    """Test cases for the /health endpoint."""
+
+    @pytest.fixture
+    def client(self):
+        """Create test client."""
+        return TestClient(app)
+
+    def test_health_missing_env_vars(self, client, clear_env):
+        """Test health check with missing environment variables."""
+        response = client.get("/health")
+        
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "unhealthy"
+        assert data["app_status"] == "ok"
+        assert data["smb_connection"] == "not_configured"
+        assert data["smb_share_accessible"] is False
+        assert "Missing SMB configuration environment variables" in data["error"]
+        assert "SMB_SERVER_NAME" in data["error"]
+
+    def test_health_partial_env_vars(self, client, clear_env):
+        """Test health check with only some environment variables set."""
+        # Set only some environment variables
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        # Missing SMB_SHARE_NAME, SMB_USERNAME, SMB_PASSWORD
+        
+        response = client.get("/health")
+        
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "unhealthy"
+        assert data["app_status"] == "ok"
+        assert data["smb_connection"] == "not_configured"
+        assert data["smb_share_accessible"] is False
+        assert "Missing SMB configuration environment variables" in data["error"]
+        assert "SMB_SHARE_NAME" in data["error"]
+        assert "SMB_USERNAME" in data["error"]
+        assert "SMB_PASSWORD" in data["error"]
+
+    def test_health_smb_connection_success(self, client, smb_env_vars):
+        """Test health check with successful SMB connection."""
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        
+        with patch('app.main.check_smb_health') as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare"
+            }
+            
+            response = client.get("/health")
+        
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "healthy"
+        assert data["app_status"] == "ok"
+        assert data["smb_connection"] == "ok"
+        assert data["smb_share_accessible"] is True
+        assert data["server"] == "testserver (127.0.0.1:445)"
+        assert data["share"] == "testshare"
+        
+        # Verify check_smb_health was called with correct parameters
+        mock_health.assert_called_once_with(
+            "testserver",
+            "127.0.0.1", 
+            "testshare",
+            "testuser",
+            "testpass",
+            "",  # domain
+            445,  # port
+            True,  # use_ntlm_v2
+        )
+
+    def test_health_smb_connection_failure(self, client, smb_env_vars):
+        """Test health check with SMB connection failure."""
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        
+        with patch('app.main.check_smb_health') as mock_health:
+            mock_health.return_value = {
+                "status": "unhealthy",
+                "smb_connection": "failed", 
+                "smb_share_accessible": False,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare",
+                "error": "Connection refused"
+            }
+            
+            response = client.get("/health")
+        
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "unhealthy"
+        assert data["app_status"] == "ok"
+        assert data["smb_connection"] == "failed"
+        assert data["smb_share_accessible"] is False
+        assert data["error"] == "Connection refused"
+
+    def test_health_environment_parsing(self, client, clear_env):
+        """Test health check environment variable parsing."""
+        # Set environment variables with different formats
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        os.environ["SMB_SHARE_NAME"] = "testshare"
+        os.environ["SMB_USERNAME"] = "testuser"
+        os.environ["SMB_PASSWORD"] = "testpass"
+        os.environ["SMB_DOMAIN"] = "TESTDOMAIN"
+        os.environ["SMB_PORT"] = "139"
+        os.environ["SMB_USE_NTLM_V2"] = "false"
+        
+        with patch('app.main.check_smb_health') as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:139)",
+                "share": "testshare"
+            }
+            
+            response = client.get("/health")
+        
+        assert response.status_code == 200
+        
+        # Verify parsed values are passed correctly
+        args = mock_health.call_args[0]  # Positional arguments
+        # Arguments: server_name, server_ip, share_name, username, password, domain, port, use_ntlm_v2
+        assert args[0] == "testserver"  # server_name
+        assert args[1] == "127.0.0.1"   # server_ip
+        assert args[2] == "testshare"    # share_name
+        assert args[3] == "testuser"     # username
+        assert args[4] == "testpass"     # password
+        assert args[5] == "TESTDOMAIN"   # domain
+        assert args[6] == 139            # port
+        assert args[7] is False          # use_ntlm_v2
+
+    def test_health_ntlm_v2_parsing_variations(self, client, smb_env_vars):
+        """Test different variations of SMB_USE_NTLM_V2 parsing."""
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        
+        test_cases = [
+            ("1", True),
+            ("true", True), 
+            ("True", True),
+            ("TRUE", True),
+            ("yes", True),
+            ("YES", True),
+            ("false", False),
+            ("False", False),
+            ("FALSE", False),
+            ("0", False),
+            ("no", False),
+            ("invalid", False),
+        ]
+        
+        with patch('app.main.check_smb_health') as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare"
+            }
+            
+            for env_value, expected_bool in test_cases:
+                mock_health.reset_mock()
+                os.environ["SMB_USE_NTLM_V2"] = env_value
+                
+                response = client.get("/health")
+                
+                assert response.status_code == 200
+                # Check the use_ntlm_v2 parameter (7th argument)
+                assert mock_health.call_args[0][7] == expected_bool, f"Failed for SMB_USE_NTLM_V2={env_value}"

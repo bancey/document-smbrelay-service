@@ -8,7 +8,6 @@ import tempfile
 
 app = FastAPI(title="Document SMB Relay Service")
 
-
 async def save_upload_to_temp(upload_file: UploadFile) -> str:
     suffix = os.path.splitext(upload_file.filename)[1]
     fd, path = tempfile.mkstemp(suffix=suffix)
@@ -22,6 +21,51 @@ async def save_upload_to_temp(upload_file: UploadFile) -> str:
     await upload_file.close()
     return path
 
+
+def load_smb_config_from_env():
+    """Load SMB configuration from environment variables and return a tuple
+    (config_dict, missing_list).
+
+    config_dict contains: server_name, server_ip, share_name, username,
+    password, domain, port, use_ntlm_v2
+    """
+    server_name = os.environ.get("SMB_SERVER_NAME")
+    server_ip = os.environ.get("SMB_SERVER_IP")
+    share_name = os.environ.get("SMB_SHARE_NAME")
+    username = os.environ.get("SMB_USERNAME")
+    password = os.environ.get("SMB_PASSWORD")
+    domain = os.environ.get("SMB_DOMAIN", "")
+    port = int(os.environ.get("SMB_PORT", "445"))
+    use_ntlm_v2 = os.environ.get("SMB_USE_NTLM_V2", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+    missing = [
+        k
+        for k, v in (
+            ("SMB_SERVER_NAME", server_name),
+            ("SMB_SERVER_IP", server_ip),
+            ("SMB_SHARE_NAME", share_name),
+            ("SMB_USERNAME", username),
+            ("SMB_PASSWORD", password),
+        )
+        if not v
+    ]
+
+    config = {
+        "server_name": server_name,
+        "server_ip": server_ip,
+        "share_name": share_name,
+        "username": username,
+        "password": password,
+        "domain": domain,
+        "port": port,
+        "use_ntlm_v2": use_ntlm_v2,
+    }
+
+    return config, missing
 
 def get_conn(
     username: str,
@@ -44,7 +88,6 @@ def get_conn(
         raise ConnectionError("Could not connect to SMB server")
     return conn
 
-
 def ensure_dirs(conn: SMBConnection, share_name: str, dir_path: str) -> None:
     if not dir_path:
         return
@@ -63,14 +106,12 @@ def ensure_dirs(conn: SMBConnection, share_name: str, dir_path: str) -> None:
                 # Some servers auto-create directories or deny listing; ignore
                 pass
 
-
 def remote_exists(conn: SMBConnection, share_name: str, path: str) -> bool:
     try:
         conn.getAttributes(share_name, path)
     except Exception:
         return False
     return True
-
 
 def store(
     conn: SMBConnection, share_name: str, local: str, remote: str, remote_dir: str
@@ -89,7 +130,6 @@ def store(
                     f"Failed to store {remote} on {share_name}: Directory path may not exist. Original error: {err}"
                 )
             raise ConnectionError(f"Failed to store {remote} on {share_name}: {err}")
-
 
 def smb_upload_file(
     local_path: str,
@@ -127,6 +167,109 @@ def smb_upload_file(
         except Exception:
             pass
 
+def check_smb_health(
+    server_name: str,
+    server_ip: str,
+    share_name: str,
+    username: str,
+    password: str,
+    domain: str = "",
+    port: int = 445,
+    use_ntlm_v2: bool = True,
+) -> dict:
+    """Check SMB server connectivity and share accessibility."""
+    try:
+        conn = get_conn(
+            username,
+            password,
+            server_name,
+            server_ip,
+            domain,
+            port,
+            use_ntlm_v2,
+        )
+        try:
+            # Test basic share access by listing root directory
+            conn.listPath(share_name, "/")
+            return {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": f"{server_name} ({server_ip}:{port})",
+                "share": share_name
+            }
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    except Exception as e:
+        return {
+            "status": "unhealthy", 
+            "smb_connection": "failed",
+            "smb_share_accessible": False,
+            "server": f"{server_name} ({server_ip}:{port})",
+            "share": share_name,
+            "error": str(e)
+        }
+
+@app.get("/health")
+async def health():
+    """
+    Health check endpoint that verifies application responsiveness and SMB connectivity.
+
+    Returns:
+        JSONResponse: A JSON object with the following structure:
+            {
+                "status": "healthy" or "unhealthy",
+                "app_status": "ok",
+                "smb_connection": "ok" or "failed" or "not_configured",
+                "smb_share_accessible": True or False,
+                "server": "<server_name> (<server_ip>:<port>)",
+                "share": "<share_name>",
+                "error": "<error_message>" (only present if unhealthy or misconfigured)
+            }
+
+    HTTP Status Codes:
+        200: Returned when the application and SMB server are healthy and accessible.
+        503: Returned when the application is unhealthy, SMB configuration is missing, or SMB server/share is inaccessible.
+    """
+    # Load SMB configuration from environment variables
+    config, missing = load_smb_config_from_env()
+
+    if missing:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "app_status": "ok",
+                "smb_connection": "not_configured",
+                "smb_share_accessible": False,
+                "error": f"Missing SMB configuration environment variables: {', '.join(missing)}"
+            }
+        )
+
+    # Test SMB connectivity
+    smb_health = await asyncio.to_thread(
+        check_smb_health,
+        config["server_name"],
+        config["server_ip"],
+        config["share_name"],
+        config["username"],
+        config["password"],
+        config["domain"],
+        config["port"],
+        config["use_ntlm_v2"],
+    )
+
+    # Add app status to health response
+    smb_health["app_status"] = "ok"
+    
+    if smb_health["status"] == "healthy":
+        return JSONResponse(content=smb_health)
+    else:
+        return JSONResponse(status_code=503, content=smb_health)
+
 
 @app.post("/upload")
 async def upload(
@@ -135,30 +278,7 @@ async def upload(
     overwrite: bool = Form(False),
 ):
     # Load SMB configuration from environment variables
-    server_name = os.environ.get("SMB_SERVER_NAME")
-    server_ip = os.environ.get("SMB_SERVER_IP")
-    share_name = os.environ.get("SMB_SHARE_NAME")
-    username = os.environ.get("SMB_USERNAME")
-    password = os.environ.get("SMB_PASSWORD")
-    domain = os.environ.get("SMB_DOMAIN", "")
-    port = int(os.environ.get("SMB_PORT", "445"))
-    use_ntlm_v2 = os.environ.get("SMB_USE_NTLM_V2", "true").lower() in (
-        "1",
-        "true",
-        "yes",
-    )
-
-    missing = [
-        k
-        for k, v in (
-            ("SMB_SERVER_NAME", server_name),
-            ("SMB_SERVER_IP", server_ip),
-            ("SMB_SHARE_NAME", share_name),
-            ("SMB_USERNAME", username),
-            ("SMB_PASSWORD", password),
-        )
-        if not v
-    ]
+    config, missing = load_smb_config_from_env()
     if missing:
         raise HTTPException(
             status_code=500,
@@ -171,20 +291,18 @@ async def upload(
 
     tmp_path = await save_upload_to_temp(file)
     try:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None,
+        await asyncio.to_thread(
             smb_upload_file,
             tmp_path,
-            server_name,
-            server_ip,
-            share_name,
+            config["server_name"],
+            config["server_ip"],
+            config["share_name"],
             remote_path,
-            username,
-            password,
-            domain,
-            port,
-            use_ntlm_v2,
+            config["username"],
+            config["password"],
+            config["domain"],
+            config["port"],
+            config["use_ntlm_v2"],
             overwrite,
         )
     except FileExistsError as e:
