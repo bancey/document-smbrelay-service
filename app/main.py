@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 from smb.SMBConnection import SMBConnection
+import aiofiles
 import asyncio
 import os
 import tempfile
@@ -12,12 +13,12 @@ async def save_upload_to_temp(upload_file: UploadFile) -> str:
     suffix = os.path.splitext(upload_file.filename)[1]
     fd, path = tempfile.mkstemp(suffix=suffix)
     os.close(fd)
-    with open(path, "wb") as dest:
+    async with aiofiles.open(path, "wb") as dest:
         while True:
             chunk = await upload_file.read(1024 * 64)
             if not chunk:
                 break
-            dest.write(chunk)
+            await dest.write(chunk)
     await upload_file.close()
     return path
 
@@ -35,7 +36,6 @@ def smb_upload_file(
     use_ntlm_v2: bool = True,
     overwrite: bool = False,
 ):
-    basename = os.path.basename(remote_path)
     remote_dir = os.path.dirname(remote_path)
 
     conn = SMBConnection(username, password, "fastapi-smb-relay", server_name, domain=domain, use_ntlm_v2=use_ntlm_v2)
