@@ -294,3 +294,27 @@ class TestSMBUploadFile:
                 )
 
         assert "Unexpected failure during write" in str(exc.value)
+
+    def test_smb_upload_file_close_raises_does_not_propagate(self, temp_file):
+        """If conn.close raises an exception it should be swallowed and not propagate."""
+        mock_conn = Mock()
+        mock_conn.connect.return_value = True
+        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
+        mock_conn.storeFile.return_value = None
+        # Simulate close raising an exception
+        mock_conn.close.side_effect = Exception("close failed")
+
+        with patch('app.main.SMBConnection', return_value=mock_conn):
+            # Should not raise despite close failing
+            smb_upload_file(
+                local_path=temp_file,
+                server_name="testserver",
+                server_ip="127.0.0.1",
+                share_name="testshare",
+                remote_path="file.txt",
+                username="testuser",
+                password="testpass",
+            )
+
+        # Ensure close was attempted even though it raised
+        mock_conn.close.assert_called_once()
