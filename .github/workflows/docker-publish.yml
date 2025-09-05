@@ -74,14 +74,11 @@ jobs:
           python -m py_compile app/main.py
           python -c "import app.main; print('Import successful')"
 
-      - name: Run unit tests
-        run: python -m pytest -m unit --tb=short
-
-      - name: Run integration tests
+      - name: Run tests
         env:
           CI_SMB_PORT: 1445
           CI_SMB_SERVER_IP: localhost
-        run: python -m pytest -m integration --tb=short
+        run: python -m pytest --tb=short
 
   build-and-push:
     runs-on: ubuntu-latest
