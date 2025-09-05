@@ -74,11 +74,17 @@ jobs:
           python -m py_compile app/main.py
           python -c "import app.main; print('Import successful')"
 
-      - name: Run tests
+      - name: Run tests with coverage
         env:
           CI_SMB_PORT: 1445
           CI_SMB_SERVER_IP: localhost
-        run: python -m pytest --tb=short
+        run: |
+          python -m pytest --tb=short --cov=app --cov-report=xml --cov-report=term-missing
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   build-and-push:
     runs-on: ubuntu-latest
