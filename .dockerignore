@@ -1,0 +1,61 @@
+# Git and version control
+.git
+.gitignore
+
+# CI/CD and GitHub configuration
+.github/
+
+# Documentation
+README.md
+
+# Testing
+tests/
+requirements-test.txt
+run_tests.sh
+pytest.ini
+.pytest_cache/
+.coverage
+.coveragerc
+htmlcov/
+coverage.xml
+
+# Code analysis and quality tools
+sonar-project.properties
+
+# Dependency management
+renovate.json
+
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+.env
+env/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+.cache/
