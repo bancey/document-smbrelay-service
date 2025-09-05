@@ -215,7 +215,25 @@ def check_smb_health(
 
 @app.get("/health")
 async def health():
-    """Health check endpoint that verifies application responsiveness and SMB connectivity."""
+    """
+    Health check endpoint that verifies application responsiveness and SMB connectivity.
+
+    Returns:
+        JSONResponse: A JSON object with the following structure:
+            {
+                "status": "healthy" or "unhealthy",
+                "app_status": "ok",
+                "smb_connection": "ok" or "failed" or "not_configured",
+                "smb_share_accessible": True or False,
+                "server": "<server_name> (<server_ip>:<port>)",
+                "share": "<share_name>",
+                "error": "<error_message>" (only present if unhealthy or misconfigured)
+            }
+
+    HTTP Status Codes:
+        200: Returned when the application and SMB server are healthy and accessible.
+        503: Returned when the application is unhealthy, SMB configuration is missing, or SMB server/share is inaccessible.
+    """
     # Load SMB configuration from environment variables
     config, missing = load_smb_config_from_env()
 
