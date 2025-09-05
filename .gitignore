@@ -97,3 +97,4 @@ node_modules/
 # Ignore system files
 Thumbs.db
 
+coverage.xml
