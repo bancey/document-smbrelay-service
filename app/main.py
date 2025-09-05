@@ -38,68 +38,70 @@ def smb_upload_file(
 ):
     remote_dir = os.path.dirname(remote_path)
 
-    conn = SMBConnection(username, password, "fastapi-smb-relay", server_name, domain=domain, use_ntlm_v2=use_ntlm_v2)
-    connected = conn.connect(server_ip, port)
-    if not connected:
-        raise ConnectionError("Could not connect to SMB server")
+    def _connect() -> SMBConnection:
+        conn = SMBConnection(
+            username,
+            password,
+            "fastapi-smb-relay",
+            server_name,
+            domain=domain,
+            use_ntlm_v2=use_ntlm_v2,
+        )
+        if not conn.connect(server_ip, port):
+            raise ConnectionError("Could not connect to SMB server")
+        return conn
 
-    # Create directories one by one for nested paths
-    if remote_dir:
-        parts = [p for p in remote_dir.split("/") if p]
-        
-        # Build directory path incrementally and ensure each level exists
+    def _ensure_dirs(conn: SMBConnection, dir_path: str) -> None:
+        if not dir_path:
+            return
+        parts = [p for p in dir_path.split("/") if p]
         current_path = ""
         for part in parts:
             current_path = f"{current_path}/{part}" if current_path else part
-            
-            # Check if directory exists
-            directory_exists = False
             try:
-                # Try to list the directory - if this succeeds, directory exists
                 conn.listPath(share_name, current_path)
-                directory_exists = True
+                continue
             except Exception:
-                # Directory doesn't exist or we don't have permission to list it
-                directory_exists = False
-            
-            # If directory doesn't exist, create it
-            if not directory_exists:
+                # If listPath fails, attempt to create and ignore errors
                 try:
                     conn.createDirectory(share_name, current_path)
                 except Exception:
-                    # createDirectory failed - this is common with some SMB servers
-                    # Continue without error as some servers auto-create directories
-                    # during file upload, or the directory might already exist but
-                    # not be listable due to permissions
+                    # Some servers auto-create directories or deny listing; ignore
                     pass
 
-    # If not allowed to overwrite, check if file exists first
-    if not overwrite:
+    def _remote_exists(conn: SMBConnection, path: str) -> bool:
         try:
-            conn.getAttributes(share_name, remote_path)
+            conn.getAttributes(share_name, path)
         except Exception:
-            # If getAttributes fails, assume file doesn't exist and continue
-            pass
-        else:
-            # getAttributes succeeded -> file exists
+            return False
+        return True
+
+    def _store(conn: SMBConnection, local: str, remote: str) -> None:
+        with open(local, "rb") as fh:
+            try:
+                conn.storeFile(share_name, remote, fh)
+            except Exception as err:
+                msg = str(err).lower()
+                if remote_dir and ("unable to open" in msg or "no such file" in msg or "path not found" in msg):
+                    raise ConnectionError(
+                        f"Failed to store {remote} on {share_name}: Directory path may not exist. Original error: {err}"
+                    )
+                raise ConnectionError(f"Failed to store {remote} on {share_name}: {err}")
+
+    conn = _connect()
+    try:
+        _ensure_dirs(conn, remote_dir)
+
+        if not overwrite and _remote_exists(conn, remote_path):
             conn.close()
             raise FileExistsError(f"Remote file already exists: {remote_path}")
 
-    with open(local_path, "rb") as file_obj:
+        _store(conn, local_path, remote_path)
+    finally:
         try:
-            conn.storeFile(share_name, remote_path, file_obj)
-        except Exception as store_error:
-            # If storeFile fails and we have nested directories, it might be because
-            # the directory creation failed silently. Let's provide a better error message.
-            if remote_dir and ("unable to open" in str(store_error).lower() or 
-                             "no such file" in str(store_error).lower() or
-                             "path not found" in str(store_error).lower()):
-                raise ConnectionError(f"Failed to store {remote_path} on {share_name}: "
-                                    f"Directory path may not exist. Original error: {store_error}")
-            else:
-                raise ConnectionError(f"Failed to store {remote_path} on {share_name}: {store_error}")
-
-    conn.close()
+            conn.close()
+        except Exception:
+            pass
 
 
 @app.post("/upload")
