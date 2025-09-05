@@ -93,7 +93,6 @@ def smb_upload_file(
         _ensure_dirs(conn, remote_dir)
 
         if not overwrite and _remote_exists(conn, remote_path):
-            conn.close()
             raise FileExistsError(f"Remote file already exists: {remote_path}")
 
         _store(conn, local_path, remote_path)
