@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import Mock, patch
-from app.main import check_smb_health
+from app.smb.connection import check_smb_health
 
 
 @pytest.mark.unit
@@ -9,7 +9,7 @@ class TestCheckSMBHealth:
 
     def test_check_smb_health_success(self):
         """Test successful SMB health check."""
-        with patch('app.main.get_conn') as mock_get_conn:
+        with patch('app.smb.connection.get_conn') as mock_get_conn:
             mock_conn = Mock()
             mock_conn.listPath.return_value = []  # Successful listPath call
             mock_conn.close.return_value = None
@@ -45,7 +45,7 @@ class TestCheckSMBHealth:
 
     def test_check_smb_health_connection_failure(self):
         """Test SMB health check with connection failure."""
-        with patch('app.main.get_conn') as mock_get_conn:
+        with patch('app.smb.connection.get_conn') as mock_get_conn:
             mock_get_conn.side_effect = ConnectionError("Could not connect to SMB server")
             
             result = check_smb_health(
@@ -65,7 +65,7 @@ class TestCheckSMBHealth:
 
     def test_check_smb_health_share_access_failure(self):
         """Test SMB health check with share access failure."""
-        with patch('app.main.get_conn') as mock_get_conn:
+        with patch('app.smb.connection.get_conn') as mock_get_conn:
             mock_conn = Mock()
             mock_conn.listPath.side_effect = Exception("Access denied")
             mock_conn.close.return_value = None
@@ -91,7 +91,7 @@ class TestCheckSMBHealth:
 
     def test_check_smb_health_close_exception_ignored(self):
         """Test that exceptions during connection close are ignored."""
-        with patch('app.main.get_conn') as mock_get_conn:
+        with patch('app.smb.connection.get_conn') as mock_get_conn:
             mock_conn = Mock()
             mock_conn.listPath.return_value = []
             mock_conn.close.side_effect = Exception("Close failed")
@@ -112,7 +112,7 @@ class TestCheckSMBHealth:
 
     def test_check_smb_health_custom_parameters(self):
         """Test SMB health check with custom domain, port, and NTLM settings."""
-        with patch('app.main.get_conn') as mock_get_conn:
+        with patch('app.smb.connection.get_conn') as mock_get_conn:
             mock_conn = Mock()
             mock_conn.listPath.return_value = []
             mock_conn.close.return_value = None
@@ -146,7 +146,7 @@ class TestCheckSMBHealth:
 
     def test_check_smb_health_generic_error(self):
         """Test SMB health check with generic error."""
-        with patch('app.main.get_conn') as mock_get_conn:
+        with patch('app.smb.connection.get_conn') as mock_get_conn:
             mock_get_conn.side_effect = Exception("Unexpected error occurred")
             
             result = check_smb_health(
