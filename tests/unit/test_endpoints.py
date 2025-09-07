@@ -1,5 +1,1040 @@
 import pytest
 import os
+from unittest.mock import patch
+from fastapi.testclient import TestClient
+from app.main import app
+import io
+
+
+@pytest.mark.unit
+class TestUploadEndpoint:
+    """Tests for the /upload endpoint."""
+
+    @pytest.fixture
+    def client(self):
+        return TestClient(app)
+
+    def test_upload_missing_env_vars(self, client, clear_env):
+        test_file = io.BytesIO(b"test content")
+        response = client.post(
+            "/upload",
+            files={"file": ("test.txt", test_file, "text/plain")},
+            data={"remote_path": "test.txt"},
+        )
+        assert response.status_code == 500
+        assert "Missing SMB configuration environment variables" in response.json()["detail"]
+
+    def test_upload_partial_env_vars(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        test_file = io.BytesIO(b"test content")
+        response = client.post(
+            "/upload",
+            files={"file": ("test.txt", test_file, "text/plain")},
+            data={"remote_path": "test.txt"},
+        )
+        assert response.status_code == 500
+
+    def test_upload_path_normalization(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "/leading/slash/file.txt"},
+            )
+        mock_upload.assert_called_once()
+        args = mock_upload.call_args[0]
+        assert args[4] == "leading/slash/file.txt"
+
+    def test_upload_success(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "folder/test.txt"},
+            )
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "remote_path": "folder/test.txt"}
+        mock_upload.assert_called_once()
+        args = mock_upload.call_args[0]
+        assert args[1] == "testserver"
+        assert args[2] == "127.0.0.1"
+        assert args[3] == "testshare"
+        assert args[4] == "folder/test.txt"
+        assert args[5] == "testuser"
+        assert args[6] == "testpass"
+
+    def test_upload_with_overwrite(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt", "overwrite": "true"},
+            )
+        assert response.status_code == 200
+        args = mock_upload.call_args[0]
+        # overwrite is the 11th positional arg (index 10)
+        assert args[10] is True
+
+    def test_upload_file_exists_error(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = FileExistsError("Remote file already exists: test.txt")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 409
+
+    def test_upload_connection_error(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = ConnectionError("Could not connect to SMB server")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 500
+
+    def test_upload_generic_error(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = Exception("Unexpected error")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 500
+
+    def test_upload_environment_parsing(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        os.environ["SMB_SHARE_NAME"] = "testshare"
+        os.environ["SMB_USERNAME"] = "testuser"
+        os.environ["SMB_PASSWORD"] = "testpass"
+        os.environ["SMB_DOMAIN"] = "TESTDOMAIN"
+        os.environ["SMB_PORT"] = "139"
+        os.environ["SMB_USE_NTLM_V2"] = "false"
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        args = mock_upload.call_args[0]
+        assert args[7] == "TESTDOMAIN"
+        assert args[8] == 139
+        assert args[9] is False
+
+    def test_upload_ntlm_v2_parsing_variations(self, client, smb_env_vars):
+        test_values = [
+            ("1", True),
+            ("true", True),
+            ("TRUE", True),
+            ("yes", True),
+            ("YES", True),
+            ("0", False),
+            ("false", False),
+            ("FALSE", False),
+            ("no", False),
+            ("anything_else", False),
+        ]
+        for env_value, expected in test_values:
+            for var, value in smb_env_vars.items():
+                os.environ[var] = value
+            os.environ["SMB_USE_NTLM_V2"] = env_value
+            test_file = io.BytesIO(b"test content")
+            with patch("app.smb.smb_upload_file") as mock_upload:
+                client.post(
+                    "/upload",
+                    files={"file": ("test.txt", test_file, "text/plain")},
+                    data={"remote_path": "test.txt"},
+                )
+            args = mock_upload.call_args[0]
+            assert args[9] is expected
+
+    def test_upload_missing_file(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        response = client.post("/upload", data={"remote_path": "test.txt"})
+        assert response.status_code == 422
+
+    def test_upload_missing_remote_path(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        response = client.post(
+            "/upload",
+            files={"file": ("test.txt", test_file, "text/plain")},
+        )
+        assert response.status_code == 422
+
+    @patch("app.main.os.remove")
+    def test_temp_file_cleanup_success(self, mock_remove, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file"):
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 200
+        mock_remove.assert_called_once()
+
+    @patch("app.main.os.remove")
+    def test_temp_file_cleanup_on_error(self, mock_remove, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = Exception("Upload failed")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 500
+        mock_remove.assert_called_once()
+
+    def test_temp_file_cleanup_remove_raises_is_swallowed(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file"):
+            with patch("app.main.os.remove", side_effect=Exception("remove failed")) as mock_remove:
+                response = client.post(
+                    "/upload",
+                    files={"file": ("test.txt", test_file, "text/plain")},
+                    data={"remote_path": "test.txt"},
+                )
+        assert response.status_code == 200
+        mock_remove.assert_called_once()
+
+
+@pytest.mark.unit
+class TestHealthEndpoint:
+    @pytest.fixture
+    def client(self):
+        return TestClient(app)
+
+    def test_health_missing_env_vars(self, client, clear_env):
+        response = client.get("/health")
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "unhealthy"
+        assert data["smb_connection"] == "not_configured"
+
+    def test_health_partial_env_vars(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        response = client.get("/health")
+        assert response.status_code == 503
+
+    def test_health_smb_connection_success(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare",
+            }
+            response = client.get("/health")
+        assert response.status_code == 200
+        mock_health.assert_called_once_with(
+            "testserver",
+            "127.0.0.1",
+            "testshare",
+            "testuser",
+            "testpass",
+            "",
+            445,
+            True,
+        )
+
+    def test_health_smb_connection_failure(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "unhealthy",
+                "smb_connection": "failed",
+                "smb_share_accessible": False,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare",
+                "error": "Connection refused",
+            }
+            response = client.get("/health")
+        assert response.status_code == 503
+
+    def test_health_environment_parsing(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        os.environ["SMB_SHARE_NAME"] = "testshare"
+        os.environ["SMB_USERNAME"] = "testuser"
+        os.environ["SMB_PASSWORD"] = "testpass"
+        os.environ["SMB_DOMAIN"] = "TESTDOMAIN"
+        os.environ["SMB_PORT"] = "139"
+        os.environ["SMB_USE_NTLM_V2"] = "false"
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:139)",
+                "share": "testshare",
+            }
+            response = client.get("/health")
+        assert response.status_code == 200
+
+    def test_health_ntlm_v2_parsing_variations(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_cases = [
+            ("1", True),
+            ("true", True),
+            ("True", True),
+            ("TRUE", True),
+            ("yes", True),
+            ("YES", True),
+            ("false", False),
+            ("False", False),
+            ("FALSE", False),
+            ("0", False),
+            ("no", False),
+            ("invalid", False),
+        ]
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare",
+            }
+            for env_value, expected_bool in test_cases:
+                mock_health.reset_mock()
+                os.environ["SMB_USE_NTLM_V2"] = env_value
+                response = client.get("/health")
+                assert response.status_code == 200
+                assert mock_health.call_args[0][7] == expected_bool
+import pytest
+import os
+from unittest.mock import patch
+from fastapi.testclient import TestClient
+from app.main import app
+import io
+
+
+@pytest.mark.unit
+class TestUploadEndpoint:
+    """Tests for the /upload endpoint."""
+
+    @pytest.fixture
+    def client(self):
+        return TestClient(app)
+
+    def test_upload_missing_env_vars(self, client, clear_env):
+        test_file = io.BytesIO(b"test content")
+        response = client.post(
+            "/upload",
+            files={"file": ("test.txt", test_file, "text/plain")},
+            data={"remote_path": "test.txt"},
+        )
+        assert response.status_code == 500
+        assert "Missing SMB configuration environment variables" in response.json()["detail"]
+
+    def test_upload_partial_env_vars(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        test_file = io.BytesIO(b"test content")
+        response = client.post(
+            "/upload",
+            files={"file": ("test.txt", test_file, "text/plain")},
+            data={"remote_path": "test.txt"},
+        )
+        assert response.status_code == 500
+
+    def test_upload_path_normalization(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "/leading/slash/file.txt"},
+            )
+        mock_upload.assert_called_once()
+        args = mock_upload.call_args[0]
+        assert args[4] == "leading/slash/file.txt"
+
+    def test_upload_success(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "folder/test.txt"},
+            )
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "remote_path": "folder/test.txt"}
+        mock_upload.assert_called_once()
+        args = mock_upload.call_args[0]
+        assert args[1] == "testserver"
+        assert args[2] == "127.0.0.1"
+        assert args[3] == "testshare"
+        assert args[4] == "folder/test.txt"
+        assert args[5] == "testuser"
+        assert args[6] == "testpass"
+
+    def test_upload_with_overwrite(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt", "overwrite": "true"},
+            )
+        assert response.status_code == 200
+        args = mock_upload.call_args[0]
+        assert args[10] is True
+
+    def test_upload_file_exists_error(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = FileExistsError("Remote file already exists: test.txt")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 409
+
+    def test_upload_connection_error(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = ConnectionError("Could not connect to SMB server")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 500
+
+    def test_upload_generic_error(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = Exception("Unexpected error")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 500
+
+    def test_upload_environment_parsing(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        os.environ["SMB_SHARE_NAME"] = "testshare"
+        os.environ["SMB_USERNAME"] = "testuser"
+        os.environ["SMB_PASSWORD"] = "testpass"
+        os.environ["SMB_DOMAIN"] = "TESTDOMAIN"
+        os.environ["SMB_PORT"] = "139"
+        os.environ["SMB_USE_NTLM_V2"] = "false"
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        args = mock_upload.call_args[0]
+        assert args[7] == "TESTDOMAIN"
+        assert args[8] == 139
+        assert args[9] is False
+
+    def test_upload_ntlm_v2_parsing_variations(self, client, smb_env_vars):
+        test_values = [
+            ("1", True),
+            ("true", True),
+            ("TRUE", True),
+            ("yes", True),
+            ("YES", True),
+            ("0", False),
+            ("false", False),
+            ("FALSE", False),
+            ("no", False),
+            ("anything_else", False),
+        ]
+        for env_value, expected in test_values:
+            for var, value in smb_env_vars.items():
+                os.environ[var] = value
+            os.environ["SMB_USE_NTLM_V2"] = env_value
+            test_file = io.BytesIO(b"test content")
+            with patch("app.smb.smb_upload_file") as mock_upload:
+                client.post(
+                    "/upload",
+                    files={"file": ("test.txt", test_file, "text/plain")},
+                    data={"remote_path": "test.txt"},
+                )
+            args = mock_upload.call_args[0]
+            assert args[9] is expected
+
+    def test_upload_missing_file(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        response = client.post("/upload", data={"remote_path": "test.txt"})
+        assert response.status_code == 422
+
+    def test_upload_missing_remote_path(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        response = client.post(
+            "/upload",
+            files={"file": ("test.txt", test_file, "text/plain")},
+        )
+        assert response.status_code == 422
+
+    @patch("app.main.os.remove")
+    def test_temp_file_cleanup_success(self, mock_remove, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file"):
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 200
+        mock_remove.assert_called_once()
+
+    @patch("app.main.os.remove")
+    def test_temp_file_cleanup_on_error(self, mock_remove, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = Exception("Upload failed")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 500
+        mock_remove.assert_called_once()
+
+    def test_temp_file_cleanup_remove_raises_is_swallowed(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file"):
+            with patch("app.main.os.remove", side_effect=Exception("remove failed")) as mock_remove:
+                response = client.post(
+                    "/upload",
+                    files={"file": ("test.txt", test_file, "text/plain")},
+                    data={"remote_path": "test.txt"},
+                )
+        assert response.status_code == 200
+        mock_remove.assert_called_once()
+
+
+@pytest.mark.unit
+class TestHealthEndpoint:
+    @pytest.fixture
+    def client(self):
+        return TestClient(app)
+
+    def test_health_missing_env_vars(self, client, clear_env):
+        response = client.get("/health")
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "unhealthy"
+        assert data["smb_connection"] == "not_configured"
+
+    def test_health_partial_env_vars(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        response = client.get("/health")
+        assert response.status_code == 503
+
+    def test_health_smb_connection_success(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare",
+            }
+            response = client.get("/health")
+        assert response.status_code == 200
+        mock_health.assert_called_once_with(
+            "testserver",
+            "127.0.0.1",
+            "testshare",
+            "testuser",
+            "testpass",
+            "",
+            445,
+            True,
+        )
+
+    def test_health_smb_connection_failure(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "unhealthy",
+                "smb_connection": "failed",
+                "smb_share_accessible": False,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare",
+                "error": "Connection refused",
+            }
+            response = client.get("/health")
+        assert response.status_code == 503
+
+    def test_health_environment_parsing(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        os.environ["SMB_SHARE_NAME"] = "testshare"
+        os.environ["SMB_USERNAME"] = "testuser"
+        os.environ["SMB_PASSWORD"] = "testpass"
+        os.environ["SMB_DOMAIN"] = "TESTDOMAIN"
+        os.environ["SMB_PORT"] = "139"
+        os.environ["SMB_USE_NTLM_V2"] = "false"
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:139)",
+                "share": "testshare",
+            }
+            response = client.get("/health")
+        assert response.status_code == 200
+
+    def test_health_ntlm_v2_parsing_variations(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_cases = [
+            ("1", True),
+            ("true", True),
+            ("True", True),
+            ("TRUE", True),
+            ("yes", True),
+            ("YES", True),
+            ("false", False),
+            ("False", False),
+            ("FALSE", False),
+            ("0", False),
+            ("no", False),
+            ("invalid", False),
+        ]
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare",
+            }
+            for env_value, expected_bool in test_cases:
+                mock_health.reset_mock()
+                os.environ["SMB_USE_NTLM_V2"] = env_value
+                response = client.get("/health")
+                assert response.status_code == 200
+                assert mock_health.call_args[0][7] == expected_bool
+import pytest
+import os
+from unittest.mock import AsyncMock, Mock, patch
+from fastapi.testclient import TestClient
+from httpx import AsyncClient
+from app.main import app
+import tempfile
+import io
+
+
+@pytest.mark.unit
+class TestUploadEndpoint:
+    """Test cases for the /upload endpoint."""
+
+    @pytest.fixture
+    def client(self):
+        return TestClient(app)
+
+    @pytest.fixture
+    def test_file_data(self):
+        return io.BytesIO(b"Test file content")
+
+    def test_upload_missing_env_vars(self, client, clear_env):
+        test_file = io.BytesIO(b"test content")
+        response = client.post(
+            "/upload",
+            files={"file": ("test.txt", test_file, "text/plain")},
+            data={"remote_path": "test.txt"},
+        )
+        assert response.status_code == 500
+        assert "Missing SMB configuration environment variables" in response.json()["detail"]
+
+    def test_upload_partial_env_vars(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        test_file = io.BytesIO(b"test content")
+        response = client.post(
+            "/upload",
+            files={"file": ("test.txt", test_file, "text/plain")},
+            data={"remote_path": "test.txt"},
+        )
+        assert response.status_code == 500
+
+    def test_upload_path_normalization(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "/leading/slash/file.txt"},
+            )
+        mock_upload.assert_called_once()
+        args = mock_upload.call_args[0]
+        assert args[4] == "leading/slash/file.txt"
+
+    def test_upload_success(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "folder/test.txt"},
+            )
+        assert response.status_code == 200
+        assert response.json() == {"status": "ok", "remote_path": "folder/test.txt"}
+        mock_upload.assert_called_once()
+        args = mock_upload.call_args[0]
+        assert args[1] == "testserver"
+        assert args[2] == "127.0.0.1"
+        assert args[3] == "testshare"
+        assert args[4] == "folder/test.txt"
+        assert args[5] == "testuser"
+        assert args[6] == "testpass"
+
+    def test_upload_with_overwrite(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt", "overwrite": "true"},
+            )
+        assert response.status_code == 200
+        args = mock_upload.call_args[0]
+        assert args[10] is True
+
+    def test_upload_file_exists_error(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = FileExistsError("Remote file already exists: test.txt")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 409
+
+    def test_upload_connection_error(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = ConnectionError("Could not connect to SMB server")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 500
+
+    def test_upload_generic_error(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = Exception("Unexpected error")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 500
+
+    def test_upload_environment_parsing(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        os.environ["SMB_SHARE_NAME"] = "testshare"
+        os.environ["SMB_USERNAME"] = "testuser"
+        os.environ["SMB_PASSWORD"] = "testpass"
+        os.environ["SMB_DOMAIN"] = "TESTDOMAIN"
+        os.environ["SMB_PORT"] = "139"
+        os.environ["SMB_USE_NTLM_V2"] = "false"
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        args = mock_upload.call_args[0]
+        assert args[7] == "TESTDOMAIN"
+        assert args[8] == 139
+        assert args[9] is False
+
+    def test_upload_ntlm_v2_parsing_variations(self, client, smb_env_vars):
+        test_values = [
+            ("1", True),
+            ("true", True),
+            ("TRUE", True),
+            ("yes", True),
+            ("YES", True),
+            ("0", False),
+            ("false", False),
+            ("FALSE", False),
+            ("no", False),
+            ("anything_else", False),
+        ]
+        for env_value, expected in test_values:
+            for var, value in smb_env_vars.items():
+                os.environ[var] = value
+            os.environ["SMB_USE_NTLM_V2"] = env_value
+            test_file = io.BytesIO(b"test content")
+            with patch("app.smb.smb_upload_file") as mock_upload:
+                client.post(
+                    "/upload",
+                    files={"file": ("test.txt", test_file, "text/plain")},
+                    data={"remote_path": "test.txt"},
+                )
+            args = mock_upload.call_args[0]
+            assert args[9] is expected
+
+    def test_upload_missing_file(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        response = client.post("/upload", data={"remote_path": "test.txt"})
+        assert response.status_code == 422
+
+    def test_upload_missing_remote_path(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        response = client.post(
+            "/upload",
+            files={"file": ("test.txt", test_file, "text/plain")},
+        )
+        assert response.status_code == 422
+
+    @patch("app.main.os.remove")
+    def test_temp_file_cleanup_success(self, mock_remove, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file"):
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 200
+        mock_remove.assert_called_once()
+
+    @patch("app.main.os.remove")
+    def test_temp_file_cleanup_on_error(self, mock_remove, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file") as mock_upload:
+            mock_upload.side_effect = Exception("Upload failed")
+            response = client.post(
+                "/upload",
+                files={"file": ("test.txt", test_file, "text/plain")},
+                data={"remote_path": "test.txt"},
+            )
+        assert response.status_code == 500
+        mock_remove.assert_called_once()
+
+    def test_temp_file_cleanup_remove_raises_is_swallowed(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_file = io.BytesIO(b"test content")
+        with patch("app.smb.smb_upload_file"):
+            with patch("app.main.os.remove", side_effect=Exception("remove failed")) as mock_remove:
+                response = client.post(
+                    "/upload",
+                    files={"file": ("test.txt", test_file, "text/plain")},
+                    data={"remote_path": "test.txt"},
+                )
+        assert response.status_code == 200
+        mock_remove.assert_called_once()
+
+
+@pytest.mark.unit
+class TestHealthEndpoint:
+    @pytest.fixture
+    def client(self):
+        return TestClient(app)
+
+    def test_health_missing_env_vars(self, client, clear_env):
+        response = client.get("/health")
+        assert response.status_code == 503
+        data = response.json()
+        assert data["status"] == "unhealthy"
+        assert data["smb_connection"] == "not_configured"
+
+    def test_health_partial_env_vars(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        response = client.get("/health")
+        assert response.status_code == 503
+
+    def test_health_smb_connection_success(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare",
+            }
+            response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "healthy"
+        mock_health.assert_called_once_with(
+            "testserver",
+            "127.0.0.1",
+            "testshare",
+            "testuser",
+            "testpass",
+            "",
+            445,
+            True,
+        )
+
+    def test_health_smb_connection_failure(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "unhealthy",
+                "smb_connection": "failed",
+                "smb_share_accessible": False,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare",
+                "error": "Connection refused",
+            }
+            response = client.get("/health")
+        assert response.status_code == 503
+
+    def test_health_environment_parsing(self, client, clear_env):
+        os.environ["SMB_SERVER_NAME"] = "testserver"
+        os.environ["SMB_SERVER_IP"] = "127.0.0.1"
+        os.environ["SMB_SHARE_NAME"] = "testshare"
+        os.environ["SMB_USERNAME"] = "testuser"
+        os.environ["SMB_PASSWORD"] = "testpass"
+        os.environ["SMB_DOMAIN"] = "TESTDOMAIN"
+        os.environ["SMB_PORT"] = "139"
+        os.environ["SMB_USE_NTLM_V2"] = "false"
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:139)",
+                "share": "testshare",
+            }
+            response = client.get("/health")
+        assert response.status_code == 200
+
+    def test_health_ntlm_v2_parsing_variations(self, client, smb_env_vars):
+        for var, value in smb_env_vars.items():
+            os.environ[var] = value
+        test_cases = [
+            ("1", True),
+            ("true", True),
+            ("True", True),
+            ("TRUE", True),
+            ("yes", True),
+            ("YES", True),
+            ("false", False),
+            ("False", False),
+            ("FALSE", False),
+            ("0", False),
+            ("no", False),
+            ("invalid", False),
+        ]
+        with patch("app.smb.check_smb_health") as mock_health:
+            mock_health.return_value = {
+                "status": "healthy",
+                "smb_connection": "ok",
+                "smb_share_accessible": True,
+                "server": "testserver (127.0.0.1:445)",
+                "share": "testshare",
+            }
+            for env_value, expected_bool in test_cases:
+                mock_health.reset_mock()
+                os.environ["SMB_USE_NTLM_V2"] = env_value
+                response = client.get("/health")
+                assert response.status_code == 200
+                assert mock_health.call_args[0][7] == expected_bool
+import pytest
+import os
 from unittest.mock import AsyncMock, Mock, patch
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
@@ -65,7 +1100,7 @@ class TestUploadEndpoint:
         
         test_file = io.BytesIO(b"test content")
         
-        with patch('app.main.smb_upload_file') as mock_upload:
+        with patch('app.smb.smb_upload_file') as mock_upload:
             response = client.post(
                 "/upload",
                 files={"file": ("test.txt", test_file, "text/plain")},
@@ -85,7 +1120,7 @@ class TestUploadEndpoint:
         
         test_file = io.BytesIO(b"test content")
         
-        with patch('app.main.smb_upload_file') as mock_upload:
+        with patch('app.smb.smb_upload_file') as mock_upload:
             response = client.post(
                 "/upload",
                 files={"file": ("test.txt", test_file, "text/plain")},
@@ -114,13 +1149,13 @@ class TestUploadEndpoint:
         
         test_file = io.BytesIO(b"test content")
         
-        with patch('app.main.smb_upload_file') as mock_upload:
+        with patch('app.smb.smb_upload_file') as mock_upload:
             response = client.post(
                 "/upload",
                 files={"file": ("test.txt", test_file, "text/plain")},
                 data={"remote_path": "test.txt", "overwrite": "true"}
             )
-        
+
         assert response.status_code == 200
         
         # Verify overwrite parameter was passed correctly
@@ -134,7 +1169,7 @@ class TestUploadEndpoint:
         
         test_file = io.BytesIO(b"test content")
         
-        with patch('app.main.smb_upload_file') as mock_upload:
+        with patch('app.smb.smb_upload_file') as mock_upload:
             mock_upload.side_effect = FileExistsError("Remote file already exists: test.txt")
             
             response = client.post(
@@ -153,7 +1188,7 @@ class TestUploadEndpoint:
         
         test_file = io.BytesIO(b"test content")
         
-        with patch('app.main.smb_upload_file') as mock_upload:
+        with patch('app.smb.smb_upload_file') as mock_upload:
             mock_upload.side_effect = ConnectionError("Could not connect to SMB server")
             
             response = client.post(
@@ -172,7 +1207,7 @@ class TestUploadEndpoint:
         
         test_file = io.BytesIO(b"test content")
         
-        with patch('app.main.smb_upload_file') as mock_upload:
+        with patch('app.smb.smb_upload_file') as mock_upload:
             mock_upload.side_effect = Exception("Unexpected error")
             
             response = client.post(
@@ -198,7 +1233,7 @@ class TestUploadEndpoint:
         
         test_file = io.BytesIO(b"test content")
         
-        with patch('app.main.smb_upload_file') as mock_upload:
+        with patch('app.smb.smb_upload_file') as mock_upload:
             response = client.post(
                 "/upload",
                 files={"file": ("test.txt", test_file, "text/plain")},
@@ -234,7 +1269,7 @@ class TestUploadEndpoint:
             
             test_file = io.BytesIO(b"test content")
             
-            with patch('app.main.smb_upload_file') as mock_upload:
+            with patch('app.smb.smb_upload_file') as mock_upload:
                 response = client.post(
                     "/upload",
                     files={"file": ("test.txt", test_file, "text/plain")},
@@ -278,7 +1313,7 @@ class TestUploadEndpoint:
         
         test_file = io.BytesIO(b"test content")
         
-        with patch('app.main.smb_upload_file'):
+        with patch('app.smb.smb_upload_file'):
             response = client.post(
                 "/upload",
                 files={"file": ("test.txt", test_file, "text/plain")},
@@ -297,7 +1332,7 @@ class TestUploadEndpoint:
         
         test_file = io.BytesIO(b"test content")
         
-        with patch('app.main.smb_upload_file') as mock_upload:
+        with patch('app.smb.smb_upload_file') as mock_upload:
             mock_upload.side_effect = Exception("Upload failed")
             
             response = client.post(
@@ -318,7 +1353,7 @@ class TestUploadEndpoint:
         test_file = io.BytesIO(b"test content")
 
         # Patch smb_upload_file to succeed, and os.remove to raise
-        with patch('app.main.smb_upload_file'):
+        with patch('app.smb.smb_upload_file'):
             with patch('app.main.os.remove', side_effect=Exception('remove failed')) as mock_remove:
                 response = client.post(
                     "/upload",

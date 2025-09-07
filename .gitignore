@@ -98,3 +98,6 @@ node_modules/
 Thumbs.db
 
 coverage.xml
+
+# Python venv
+smbrelay/
