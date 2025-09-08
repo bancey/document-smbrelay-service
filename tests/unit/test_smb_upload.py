@@ -1,7 +1,7 @@
 import pytest
 import os
 from unittest.mock import Mock, patch, mock_open
-from app.main import smb_upload_file
+from app.smb.operations import smb_upload_file
 
 
 @pytest.mark.unit
@@ -18,7 +18,7 @@ class TestSMBUploadFile:
         mock_conn.storeFile.return_value = None
         mock_conn.close.return_value = None
 
-        with patch('app.main.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
@@ -52,7 +52,7 @@ class TestSMBUploadFile:
         mock_conn = Mock()
         mock_conn.connect.return_value = False
 
-        with patch('app.main.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             with pytest.raises(ConnectionError, match="Could not connect to SMB server"):
                 smb_upload_file(
                     local_path=temp_file,
@@ -71,7 +71,7 @@ class TestSMBUploadFile:
         mock_conn.getAttributes.return_value = Mock()  # File exists
         mock_conn.close.return_value = None
 
-        with patch('app.main.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             with pytest.raises(FileExistsError, match="Remote file already exists: file.txt"):
                 smb_upload_file(
                     local_path=temp_file,
@@ -95,7 +95,7 @@ class TestSMBUploadFile:
         mock_conn.storeFile.return_value = None
         mock_conn.close.return_value = None
 
-        with patch('app.main.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
@@ -120,7 +120,7 @@ class TestSMBUploadFile:
         mock_conn.storeFile.return_value = None
         mock_conn.close.return_value = None
 
-        with patch('app.main.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
@@ -152,7 +152,7 @@ class TestSMBUploadFile:
         mock_conn.storeFile.return_value = None
         mock_conn.close.return_value = None
 
-        with patch('app.main.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
@@ -174,7 +174,7 @@ class TestSMBUploadFile:
         mock_conn.storeFile.return_value = None
         mock_conn.close.return_value = None
 
-        with patch('app.main.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
@@ -197,7 +197,7 @@ class TestSMBUploadFile:
         mock_conn.storeFile.return_value = None
         mock_conn.close.return_value = None
 
-        with patch('app.main.SMBConnection', return_value=mock_conn) as mock_smb_class:
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn) as mock_smb_class:
             smb_upload_file(
                 local_path=temp_file,
                 server_name="customserver",
@@ -230,7 +230,7 @@ class TestSMBUploadFile:
         mock_conn.storeFile.return_value = None
         mock_conn.close.return_value = None
 
-        with patch('app.main.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             # Should not raise exception even if directory creation fails
             smb_upload_file(
                 local_path=temp_file,
@@ -258,7 +258,7 @@ class TestSMBUploadFile:
         mock_conn.storeFile.side_effect = Exception("[Errno 2] No such file or directory: 'path not found'")
         mock_conn.close.return_value = None
 
-        with patch('app.main.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             with pytest.raises(ConnectionError) as exc:
                 smb_upload_file(
                     local_path=temp_file,
@@ -281,7 +281,7 @@ class TestSMBUploadFile:
         mock_conn.storeFile.side_effect = Exception("Unexpected failure during write")
         mock_conn.close.return_value = None
 
-        with patch('app.main.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             with pytest.raises(ConnectionError) as exc:
                 smb_upload_file(
                     local_path=temp_file,
@@ -304,7 +304,7 @@ class TestSMBUploadFile:
         # Simulate close raising an exception
         mock_conn.close.side_effect = Exception("close failed")
 
-        with patch('app.main.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             # Should not raise despite close failing
             smb_upload_file(
                 local_path=temp_file,
