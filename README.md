@@ -69,6 +69,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 - Using the example `127.0.0.1` test values will usually produce a connection error (expected in local dev if no SMB server is running).
 
 **API**
+- **GET** `/health` — health check endpoint
+	- Returns `200` if application and SMB server are healthy and accessible
+	- Returns `503` if application is unhealthy, SMB configuration is missing, or SMB server/share is inaccessible
+	- JSON response includes `status`, `app_status`, `smb_connection`, `smb_share_accessible`, `server`, and `share` fields
+
 - **POST** `/upload` (multipart/form-data)
 	- `file`: the uploaded file
 	- `remote_path`: path inside the share to write to (e.g., `inbox/report.pdf`). Leading `/` is stripped.
@@ -173,6 +178,7 @@ See `tests/README.md` for more test details.
 - `uvicorn[standard]` — ASGI server
 - `pysmb` — SMB client used to write files to shares
 - `python-multipart` — multipart/form handling
+- `aiofiles` — async file operations
 
 **Troubleshooting**
 - `Missing SMB configuration environment variables`: ensure required `SMB_*` env vars are set before starting the server.
