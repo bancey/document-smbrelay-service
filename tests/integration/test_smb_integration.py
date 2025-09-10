@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from app.main import app
 from app.smb.operations import smb_upload_file
+import smbclient
 
 
 @pytest.mark.integration
@@ -74,26 +75,26 @@ class TestSMBIntegration:
         if not os.getenv('CI_SMB_PORT'):
             return
             
-        from smb.SMBConnection import SMBConnection
-        
         max_wait = 30  # seconds in CI
         wait_interval = 1  # seconds
         start_time = time.time()
         
+        # Build UNC path for connection test
+        unc_path = f"//{smb_config['server_ip']}/{smb_config['share_name']}"
+        
         while time.time() - start_time < max_wait:
             try:
-                conn = SMBConnection(
-                    smb_config["username"],
-                    smb_config["password"],
-                    "test-client",
-                    smb_config["server_name"],
-                    domain=smb_config["domain"],
-                    use_ntlm_v2=smb_config["use_ntlm_v2"]
+                # Register session with smbclient
+                smbclient.register_session(
+                    server=smb_config["server_ip"],
+                    username=smb_config["username"],
+                    password=smb_config["password"],
+                    port=smb_config["port"]
                 )
                 
-                if conn.connect(smb_config["server_ip"], smb_config["port"], timeout=5):
-                    conn.close()
-                    return  # SMB server is ready
+                # Test connection by listing the share
+                smbclient.listdir(unc_path)
+                return  # SMB server is ready
                     
             except Exception:
                 pass
@@ -113,34 +114,36 @@ class TestSMBIntegration:
             **smb_config
         )
         
-        # Verify file was uploaded by trying to retrieve its attributes
-        from smb.SMBConnection import SMBConnection
+        # Verify file was uploaded by checking if it exists
+        unc_path = f"//{smb_config['server_ip']}/{smb_config['share_name']}"
+        full_remote_path = f"{unc_path}/{remote_path}"
         
-        conn = SMBConnection(
-            smb_config["username"],
-            smb_config["password"],
-            "test-client",
-            smb_config["server_name"],
-            domain=smb_config["domain"],
-            use_ntlm_v2=smb_config["use_ntlm_v2"]
+        # Register session for verification
+        smbclient.register_session(
+            server=smb_config["server_ip"],
+            username=smb_config["username"],
+            password=smb_config["password"],
+            port=smb_config["port"]
         )
         
         try:
-            connected = conn.connect(smb_config["server_ip"], smb_config["port"], timeout=10)
-            assert connected, "Could not connect to SMB server"
-            
             # File should exist
-            attrs = conn.getAttributes(smb_config["share_name"], remote_path)
+            attrs = smbclient.stat(full_remote_path)
             assert attrs is not None
             
             # Clean up
             try:
-                conn.deleteFiles(smb_config["share_name"], remote_path)
+                smbclient.remove(full_remote_path)
             except:
                 pass  # Ignore cleanup errors
-            
-        finally:
-            conn.close()
+                
+        except Exception as e:
+            # Clean up on error too
+            try:
+                smbclient.remove(full_remote_path)
+            except:
+                pass
+            raise e
 
     def test_smb_upload_file_overwrite_protection(self, smb_config, temp_file, wait_for_smb):
         """Test that overwrite protection works."""
@@ -171,25 +174,20 @@ class TestSMBIntegration:
         )
         
         # Clean up
-        from smb.SMBConnection import SMBConnection
-        conn = SMBConnection(
-            smb_config["username"],
-            smb_config["password"],
-            "test-client",
-            smb_config["server_name"],
-            domain=smb_config["domain"],
-            use_ntlm_v2=smb_config["use_ntlm_v2"]
+        unc_path = f"//{smb_config['server_ip']}/{smb_config['share_name']}"
+        full_remote_path = f"{unc_path}/{remote_path}"
+        
+        smbclient.register_session(
+            server=smb_config["server_ip"],
+            username=smb_config["username"],
+            password=smb_config["password"],
+            port=smb_config["port"]
         )
         
         try:
-            connected = conn.connect(smb_config["server_ip"], smb_config["port"], timeout=10)
-            if connected:
-                try:
-                    conn.deleteFiles(smb_config["share_name"], remote_path)
-                except:
-                    pass  # Ignore cleanup errors
-        finally:
-            conn.close()
+            smbclient.remove(full_remote_path)
+        except:
+            pass  # Ignore cleanup errors
 
     def test_smb_upload_nested_directories(self, smb_config, temp_file, wait_for_smb):
         """Test uploading to nested directories."""
@@ -203,32 +201,34 @@ class TestSMBIntegration:
         )
         
         # Verify file exists
-        from smb.SMBConnection import SMBConnection
-        conn = SMBConnection(
-            smb_config["username"],
-            smb_config["password"],
-            "test-client",
-            smb_config["server_name"],
-            domain=smb_config["domain"],
-            use_ntlm_v2=smb_config["use_ntlm_v2"]
+        unc_path = f"//{smb_config['server_ip']}/{smb_config['share_name']}"
+        full_remote_path = f"{unc_path}/{remote_path}"
+        
+        smbclient.register_session(
+            server=smb_config["server_ip"],
+            username=smb_config["username"],
+            password=smb_config["password"],
+            port=smb_config["port"]
         )
         
         try:
-            connected = conn.connect(smb_config["server_ip"], smb_config["port"], timeout=10)
-            assert connected
-            
             # File should exist
-            attrs = conn.getAttributes(smb_config["share_name"], remote_path)
+            attrs = smbclient.stat(full_remote_path)
             assert attrs is not None
             
             # Clean up
             try:
-                conn.deleteFiles(smb_config["share_name"], remote_path)
+                smbclient.remove(full_remote_path)
             except:
                 pass  # Ignore cleanup errors
-            
-        finally:
-            conn.close()
+                
+        except Exception as e:
+            # Clean up on error too
+            try:
+                smbclient.remove(full_remote_path)
+            except:
+                pass
+            raise e
 
     def test_endpoint_integration(self, client, setup_env, wait_for_smb):
         """Test complete end-to-end upload through the FastAPI endpoint."""
@@ -247,33 +247,40 @@ class TestSMBIntegration:
         assert response.json() == {"status": "ok", "remote_path": remote_path}
         
         # Verify file was uploaded correctly by checking it exists
-        from smb.SMBConnection import SMBConnection
-        
-        # Get config from environment
         server_ip = os.environ["SMB_SERVER_IP"]
         port = int(os.environ["SMB_PORT"])
         share_name = os.environ["SMB_SHARE_NAME"]
         username = os.environ["SMB_USERNAME"]
         password = os.environ["SMB_PASSWORD"]
         
-        conn = SMBConnection(username, password, "test-client", "localhost")
+        unc_path = f"//{server_ip}/{share_name}"
+        full_remote_path = f"{unc_path}/{remote_path}"
+        
+        smbclient.register_session(
+            server=server_ip,
+            username=username,
+            password=password,
+            port=port
+        )
         
         try:
-            connected = conn.connect(server_ip, port, timeout=10)
-            assert connected
-            
             # Check file exists
-            attrs = conn.getAttributes(share_name, remote_path)
+            attrs = smbclient.stat(full_remote_path)
             assert attrs is not None
             
             # Clean up
             try:
-                conn.deleteFiles(share_name, remote_path)
+                smbclient.remove(full_remote_path)
             except:
                 pass  # Ignore cleanup errors
-            
-        finally:
-            conn.close()
+                
+        except Exception as e:
+            # Clean up on error too
+            try:
+                smbclient.remove(full_remote_path)
+            except:
+                pass
+            raise e
 
     def test_endpoint_overwrite_conflict(self, client, setup_env, wait_for_smb):
         """Test endpoint overwrite conflict handling."""
@@ -309,25 +316,26 @@ class TestSMBIntegration:
         assert response3.status_code == 200
         
         # Clean up
-        from smb.SMBConnection import SMBConnection
-        
-        # Get config from environment
         server_ip = os.environ["SMB_SERVER_IP"]
         port = int(os.environ["SMB_PORT"])
         share_name = os.environ["SMB_SHARE_NAME"]
         username = os.environ["SMB_USERNAME"]
         password = os.environ["SMB_PASSWORD"]
         
-        conn = SMBConnection(username, password, "test-client", "localhost")
+        unc_path = f"//{server_ip}/{share_name}"
+        full_remote_path = f"{unc_path}/{remote_path}"
+        
+        smbclient.register_session(
+            server=server_ip,
+            username=username,
+            password=password,
+            port=port
+        )
+        
         try:
-            connected = conn.connect(server_ip, port, timeout=10)
-            if connected:
-                try:
-                    conn.deleteFiles(share_name, remote_path)
-                except:
-                    pass  # Ignore cleanup errors
-        finally:
-            conn.close()
+            smbclient.remove(full_remote_path)
+        except:
+            pass  # Ignore cleanup errors
 
     def test_large_file_upload(self, client, setup_env, wait_for_smb):
         """Test uploading a larger file."""
@@ -346,30 +354,37 @@ class TestSMBIntegration:
         assert response.status_code == 200
         
         # Verify file size
-        from smb.SMBConnection import SMBConnection
-        
-        # Get config from environment
         server_ip = os.environ["SMB_SERVER_IP"]
         port = int(os.environ["SMB_PORT"])
         share_name = os.environ["SMB_SHARE_NAME"]
         username = os.environ["SMB_USERNAME"]
         password = os.environ["SMB_PASSWORD"]
         
-        conn = SMBConnection(username, password, "test-client", "localhost")
+        unc_path = f"//{server_ip}/{share_name}"
+        full_remote_path = f"{unc_path}/{remote_path}"
+        
+        smbclient.register_session(
+            server=server_ip,
+            username=username,
+            password=password,
+            port=port
+        )
         
         try:
-            connected = conn.connect(server_ip, port, timeout=10)
-            assert connected
-            
             # Check file attributes
-            attrs = conn.getAttributes(share_name, remote_path)
-            assert attrs.file_size == len(large_content)
+            attrs = smbclient.stat(full_remote_path)
+            assert attrs.st_size == len(large_content)
             
             # Clean up
             try:
-                conn.deleteFiles(share_name, remote_path)
+                smbclient.remove(full_remote_path)
             except:
                 pass  # Ignore cleanup errors
-            
-        finally:
-            conn.close()
+                
+        except Exception as e:
+            # Clean up on error too
+            try:
+                smbclient.remove(full_remote_path)
+            except:
+                pass
+            raise e
