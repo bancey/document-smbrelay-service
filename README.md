@@ -110,6 +110,8 @@ curl -v -X POST http://localhost:8080/upload \
 docker build -t document-smb-relay:latest .
 ```
 
+- Multi-architecture builds are automatically published to GitHub Container Registry for `linux/amd64` and `linux/arm64` platforms when changes are pushed to the main branch
+
 - Run container (example):
 
 ```bash
