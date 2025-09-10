@@ -1,12 +1,39 @@
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 import asyncio
+import logging
 import os
 
 from .config.smb_config import load_smb_config_from_env
 from .smb.connection import check_smb_health
 from .smb.operations import smb_upload_file
 from .utils.file_utils import save_upload_to_temp
+
+# Configure logging
+def configure_logging():
+    """Configure application logging based on LOG_LEVEL environment variable."""
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    
+    # Validate log level
+    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    if log_level not in valid_levels:
+        log_level = "INFO"
+    
+    # Configure root logger
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    
+    # Set log level for application modules
+    logging.getLogger("app").setLevel(getattr(logging, log_level))
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"Logging configured with level: {log_level}")
+
+# Initialize logging
+configure_logging()
 
 app = FastAPI(title="Document SMB Relay Service")
 

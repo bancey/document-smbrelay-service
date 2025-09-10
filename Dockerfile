@@ -27,6 +27,9 @@ COPY app /app/app
 
 ENV PYTHONUNBUFFERED=1
 
+# Configure default log level (can be overridden at runtime)
+ENV LOG_LEVEL=INFO
+
 # Make sure scripts in .local are usable
 ENV PATH=/root/.local/bin:$PATH
 
