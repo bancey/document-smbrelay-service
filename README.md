@@ -63,6 +63,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 - `SMB_DOMAIN`: SMB domain/workgroup (default: empty)
 - `SMB_PORT`: SMB port (default: `445`)
 - `SMB_USE_NTLM_V2`: `true|false` (default: `true`)
+- `LOG_LEVEL`: Application log level - `DEBUG|INFO|WARNING|ERROR|CRITICAL` (default: `INFO`)
 
 **Notes on running**
 - The app will start without the SMB env vars, but upload attempts will return a 500 explaining which variables are missing.
@@ -118,6 +119,7 @@ docker run --rm -p 8080:8080 \
 	-e SMB_SHARE_NAME=Documents \
 	-e SMB_USERNAME=smbuser \
 	-e SMB_PASSWORD='smb-password' \
+	-e LOG_LEVEL=DEBUG \
 	document-smb-relay:latest
 ```
 
