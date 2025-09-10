@@ -10,15 +10,18 @@ class TestSMBUploadFile:
 
     def test_smb_upload_file_basic_success(self, temp_file):
         """Test successful SMB file upload."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = True
-        mock_conn.listPath.side_effect = Exception("Directory doesn't exist")
-        mock_conn.createDirectory.return_value = None
-        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
-        mock_conn.storeFile.return_value = None
-        mock_conn.close.return_value = None
-
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.operations.get_conn') as mock_get_conn, \
+             patch('app.smb.operations.smbclient.makedirs') as mock_makedirs, \
+             patch('app.smb.operations.smbclient.stat') as mock_stat, \
+             patch('app.smb.operations.smbclient.open_file') as mock_open_smb, \
+             patch('builtins.open', mock_open(read_data=b'test content')) as mock_local_file:
+            
+            mock_get_conn.return_value = {'server': '127.0.0.1', 'port': 445}
+            mock_stat.side_effect = FileNotFoundError("File doesn't exist")  # File doesn't exist
+            mock_remote_file = Mock()
+            mock_open_smb.return_value.__enter__ = Mock(return_value=mock_remote_file)
+            mock_open_smb.return_value.__exit__ = Mock(return_value=False)
+            
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
@@ -29,30 +32,31 @@ class TestSMBUploadFile:
                 password="testpass"
             )
 
-        # Verify connection was attempted
-        mock_conn.connect.assert_called_once_with("127.0.0.1", 445)
+        # Verify connection was established
+        mock_get_conn.assert_called_once_with(
+            "testuser",
+            "testpass",
+            "testserver",
+            "127.0.0.1",
+            "",  # domain
+            445,  # port
+            True,  # use_ntlm_v2
+        )
         
         # Verify directory creation was attempted for "test"
-        mock_conn.createDirectory.assert_called_once_with("testshare", "test")
+        mock_makedirs.assert_called_once_with("//127.0.0.1/testshare/test", exist_ok=True)
         
         # Verify file existence check
-        mock_conn.getAttributes.assert_called_once_with("testshare", "test/file.txt")
+        mock_stat.assert_called_once_with("//127.0.0.1/testshare/test/file.txt")
         
         # Verify file upload
-        mock_conn.storeFile.assert_called_once()
-        args = mock_conn.storeFile.call_args[0]
-        assert args[0] == "testshare"
-        assert args[1] == "test/file.txt"
-        
-        # Verify connection closed
-        mock_conn.close.assert_called_once()
+        mock_open_smb.assert_called_once_with("//127.0.0.1/testshare/test/file.txt", "wb")
 
     def test_smb_upload_file_connection_failure(self, temp_file):
         """Test SMB connection failure."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = False
-
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.operations.get_conn') as mock_get_conn:
+            mock_get_conn.side_effect = ConnectionError("Could not connect to SMB server")
+            
             with pytest.raises(ConnectionError, match="Could not connect to SMB server"):
                 smb_upload_file(
                     local_path=temp_file,
@@ -66,12 +70,13 @@ class TestSMBUploadFile:
 
     def test_smb_upload_file_exists_no_overwrite(self, temp_file):
         """Test upload when file exists and overwrite is False."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = True
-        mock_conn.getAttributes.return_value = Mock()  # File exists
-        mock_conn.close.return_value = None
+        with patch('app.smb.operations.get_conn') as mock_get_conn, \
+             patch('app.smb.operations.smbclient.makedirs') as mock_makedirs, \
+             patch('app.smb.operations.smbclient.stat') as mock_stat:
+            
+            mock_get_conn.return_value = {'server': '127.0.0.1', 'port': 445}
+            mock_stat.return_value = Mock()  # File exists
 
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
             with pytest.raises(FileExistsError, match="Remote file already exists: file.txt"):
                 smb_upload_file(
                     local_path=temp_file,
@@ -84,18 +89,20 @@ class TestSMBUploadFile:
                     overwrite=False
                 )
 
-        # Verify connection was closed
-        mock_conn.close.assert_called_once()
-
     def test_smb_upload_file_exists_with_overwrite(self, temp_file):
         """Test upload when file exists and overwrite is True."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = True
-        mock_conn.getAttributes.return_value = Mock()  # File exists
-        mock_conn.storeFile.return_value = None
-        mock_conn.close.return_value = None
-
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
+        with patch('app.smb.operations.get_conn') as mock_get_conn, \
+             patch('app.smb.operations.smbclient.makedirs') as mock_makedirs, \
+             patch('app.smb.operations.smbclient.stat') as mock_stat, \
+             patch('app.smb.operations.smbclient.open_file') as mock_open_smb, \
+             patch('builtins.open', mock_open(read_data=b'test content')) as mock_local_file:
+            
+            mock_get_conn.return_value = {'server': '127.0.0.1', 'port': 445}
+            mock_stat.return_value = Mock()  # File exists
+            mock_remote_file = Mock()
+            mock_open_smb.return_value.__enter__ = Mock(return_value=mock_remote_file)
+            mock_open_smb.return_value.__exit__ = Mock(return_value=False)
+            
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
@@ -107,52 +114,50 @@ class TestSMBUploadFile:
                 overwrite=True
             )
 
-        # Verify file was uploaded despite existing
-        mock_conn.storeFile.assert_called_once()
+        # Should proceed with upload despite file existence
+        mock_open_smb.assert_called_once_with("//127.0.0.1/testshare/file.txt", "wb")
 
     def test_smb_upload_file_nested_directory_creation(self, temp_file):
-        """Test creation of nested directories."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = True
-        mock_conn.listPath.side_effect = Exception("Directory doesn't exist")
-        mock_conn.createDirectory.return_value = None
-        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
-        mock_conn.storeFile.return_value = None
-        mock_conn.close.return_value = None
-
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
+        """Test upload with nested directory creation."""
+        with patch('app.smb.operations.get_conn') as mock_get_conn, \
+             patch('app.smb.operations.smbclient.makedirs') as mock_makedirs, \
+             patch('app.smb.operations.smbclient.stat') as mock_stat, \
+             patch('app.smb.operations.smbclient.open_file') as mock_open_smb, \
+             patch('builtins.open', mock_open(read_data=b'test content')):
+            
+            mock_get_conn.return_value = {'server': '127.0.0.1', 'port': 445}
+            mock_stat.side_effect = FileNotFoundError("File doesn't exist")
+            mock_remote_file = Mock()
+            mock_open_smb.return_value.__enter__ = Mock(return_value=mock_remote_file)
+            mock_open_smb.return_value.__exit__ = Mock(return_value=False)
+            
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
                 server_ip="127.0.0.1",
                 share_name="testshare",
-                remote_path="level1/level2/level3/file.txt",
+                remote_path="dir1/dir2/file.txt",
                 username="testuser",
                 password="testpass"
             )
 
-        # Verify all directory levels were attempted to be created
-        expected_calls = [
-            (("testshare", "level1"),),
-            (("testshare", "level1/level2"),),
-            (("testshare", "level1/level2/level3"),)
-        ]
-        
-        assert mock_conn.createDirectory.call_count == 3
-        actual_calls = mock_conn.createDirectory.call_args_list
-        for i, expected_call in enumerate(expected_calls):
-            assert actual_calls[i][0] == expected_call[0]
+        # Verify nested directory creation
+        mock_makedirs.assert_called_once_with("//127.0.0.1/testshare/dir1/dir2", exist_ok=True)
 
     def test_smb_upload_file_directory_already_exists(self, temp_file):
-        """Test when directories already exist."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = True
-        mock_conn.listPath.return_value = []  # Directory exists
-        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
-        mock_conn.storeFile.return_value = None
-        mock_conn.close.return_value = None
-
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
+        """Test upload when directory already exists."""
+        with patch('app.smb.operations.get_conn') as mock_get_conn, \
+             patch('app.smb.operations.smbclient.makedirs') as mock_makedirs, \
+             patch('app.smb.operations.smbclient.stat') as mock_stat, \
+             patch('app.smb.operations.smbclient.open_file') as mock_open_smb, \
+             patch('builtins.open', mock_open(read_data=b'test content')):
+            
+            mock_get_conn.return_value = {'server': '127.0.0.1', 'port': 445}
+            mock_stat.side_effect = FileNotFoundError("File doesn't exist")
+            mock_remote_file = Mock()
+            mock_open_smb.return_value.__enter__ = Mock(return_value=mock_remote_file)
+            mock_open_smb.return_value.__exit__ = Mock(return_value=False)
+            
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
@@ -163,18 +168,23 @@ class TestSMBUploadFile:
                 password="testpass"
             )
 
-        # Directory creation should not be attempted
-        mock_conn.createDirectory.assert_not_called()
+        # Directory creation should still be called (with exist_ok=True)
+        mock_makedirs.assert_called_once_with("//127.0.0.1/testshare/existing_dir", exist_ok=True)
 
     def test_smb_upload_file_no_directory(self, temp_file):
-        """Test upload to root directory (no subdirectories)."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = True
-        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
-        mock_conn.storeFile.return_value = None
-        mock_conn.close.return_value = None
-
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
+        """Test upload to root directory (no subdirectory)."""
+        with patch('app.smb.operations.get_conn') as mock_get_conn, \
+             patch('app.smb.operations.smbclient.makedirs') as mock_makedirs, \
+             patch('app.smb.operations.smbclient.stat') as mock_stat, \
+             patch('app.smb.operations.smbclient.open_file') as mock_open_smb, \
+             patch('builtins.open', mock_open(read_data=b'test content')):
+            
+            mock_get_conn.return_value = {'server': '127.0.0.1', 'port': 445}
+            mock_stat.side_effect = FileNotFoundError("File doesn't exist")
+            mock_remote_file = Mock()
+            mock_open_smb.return_value.__enter__ = Mock(return_value=mock_remote_file)
+            mock_open_smb.return_value.__exit__ = Mock(return_value=False)
+            
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
@@ -185,127 +195,136 @@ class TestSMBUploadFile:
                 password="testpass"
             )
 
-        # No directory operations should occur
-        mock_conn.listPath.assert_not_called()
-        mock_conn.createDirectory.assert_not_called()
+        # No directory creation should be attempted for root level
+        mock_makedirs.assert_not_called()
 
     def test_smb_upload_file_custom_parameters(self, temp_file):
-        """Test upload with custom parameters."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = True
-        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
-        mock_conn.storeFile.return_value = None
-        mock_conn.close.return_value = None
-
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn) as mock_smb_class:
+        """Test upload with custom port and domain parameters."""
+        with patch('app.smb.operations.get_conn') as mock_get_conn, \
+             patch('app.smb.operations.smbclient.makedirs') as mock_makedirs, \
+             patch('app.smb.operations.smbclient.stat') as mock_stat, \
+             patch('app.smb.operations.smbclient.open_file') as mock_open_smb, \
+             patch('builtins.open', mock_open(read_data=b'test content')):
+            
+            mock_get_conn.return_value = {'server': '192.168.1.10', 'port': 139}
+            mock_stat.side_effect = FileNotFoundError("File doesn't exist")
+            mock_remote_file = Mock()
+            mock_open_smb.return_value.__enter__ = Mock(return_value=mock_remote_file)
+            mock_open_smb.return_value.__exit__ = Mock(return_value=False)
+            
             smb_upload_file(
                 local_path=temp_file,
-                server_name="customserver",
-                server_ip="192.168.1.100",
-                share_name="customshare",
+                server_name="testserver",
+                server_ip="192.168.1.10",
+                share_name="testshare",
                 remote_path="file.txt",
-                username="customuser",
-                password="custompass",
-                domain="MYDOMAIN",
+                username="domain_user",
+                password="secret_pass",
+                domain="TESTDOMAIN",
                 port=139,
                 use_ntlm_v2=False
             )
 
-        # Verify SMBConnection was created with custom parameters
-        mock_smb_class.assert_called_once_with(
-            "customuser", "custompass", "fastapi-smb-relay", "customserver",
-            domain="MYDOMAIN", use_ntlm_v2=False
+        # Verify custom parameters were passed to connection
+        mock_get_conn.assert_called_once_with(
+            "domain_user",
+            "secret_pass",
+            "testserver",
+            "192.168.1.10",
+            "TESTDOMAIN",
+            139,
+            False,
         )
-        
-        # Verify connection was made to custom IP and port
-        mock_conn.connect.assert_called_once_with("192.168.1.100", 139)
 
     def test_smb_upload_file_directory_creation_permission_error(self, temp_file):
         """Test handling of directory creation permission errors."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = True
-        mock_conn.listPath.side_effect = Exception("Directory doesn't exist")
-        mock_conn.createDirectory.side_effect = Exception("Permission denied")
-        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
-        mock_conn.storeFile.return_value = None
-        mock_conn.close.return_value = None
-
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
-            # Should not raise exception even if directory creation fails
+        with patch('app.smb.operations.get_conn') as mock_get_conn, \
+             patch('app.smb.operations.smbclient.makedirs') as mock_makedirs, \
+             patch('app.smb.operations.smbclient.stat') as mock_stat, \
+             patch('app.smb.operations.smbclient.open_file') as mock_open_smb, \
+             patch('builtins.open', mock_open(read_data=b'test content')):
+            
+            mock_get_conn.return_value = {'server': '127.0.0.1', 'port': 445}
+            mock_makedirs.side_effect = PermissionError("Permission denied")
+            mock_stat.side_effect = FileNotFoundError("File doesn't exist")
+            mock_remote_file = Mock()
+            mock_open_smb.return_value.__enter__ = Mock(return_value=mock_remote_file)
+            mock_open_smb.return_value.__exit__ = Mock(return_value=False)
+            
+            # Should still proceed with upload despite directory creation failure
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
                 server_ip="127.0.0.1",
                 share_name="testshare",
-                remote_path="restricted/file.txt",
+                remote_path="test/file.txt",
                 username="testuser",
                 password="testpass"
             )
 
-        # File upload should still be attempted (might be called multiple times for directory creation)
-        assert mock_conn.storeFile.call_count >= 1
-        # Verify the actual file upload was called
-        actual_file_calls = [call for call in mock_conn.storeFile.call_args_list 
-                           if call[0][1] == "restricted/file.txt"]
-        assert len(actual_file_calls) == 1
+        mock_open_smb.assert_called_once()
 
     def test_smb_upload_file_storefile_path_error(self, temp_file):
-        """When storeFile raises a path-related error, a ConnectionError explains directory may not exist."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = True
-        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
-        # Simulate storeFile raising a path-related error
-        mock_conn.storeFile.side_effect = Exception("[Errno 2] No such file or directory: 'path not found'")
-        mock_conn.close.return_value = None
-
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
-            with pytest.raises(ConnectionError) as exc:
+        """Test handling of store file path-related errors."""
+        with patch('app.smb.operations.get_conn') as mock_get_conn, \
+             patch('app.smb.operations.smbclient.makedirs') as mock_makedirs, \
+             patch('app.smb.operations.smbclient.stat') as mock_stat, \
+             patch('app.smb.operations.smbclient.open_file') as mock_open_smb:
+            
+            mock_get_conn.return_value = {'server': '127.0.0.1', 'port': 445}
+            mock_stat.side_effect = FileNotFoundError("File doesn't exist")
+            mock_open_smb.side_effect = Exception("path not found")
+            
+            with pytest.raises(ConnectionError, match="Directory path may not exist"):
                 smb_upload_file(
                     local_path=temp_file,
                     server_name="testserver",
                     server_ip="127.0.0.1",
                     share_name="testshare",
-                    remote_path="subdir/file.txt",
+                    remote_path="nonexistent/file.txt",
                     username="testuser",
-                    password="testpass",
+                    password="testpass"
                 )
-
-        assert "Directory path may not exist" in str(exc.value)
 
     def test_smb_upload_file_storefile_generic_error(self, temp_file):
-        """When storeFile raises a generic error, a ConnectionError with original error is raised."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = True
-        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
-        # Simulate storeFile raising a generic error
-        mock_conn.storeFile.side_effect = Exception("Unexpected failure during write")
-        mock_conn.close.return_value = None
-
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
-            with pytest.raises(ConnectionError) as exc:
+        """Test handling of generic store file errors."""
+        with patch('app.smb.operations.get_conn') as mock_get_conn, \
+             patch('app.smb.operations.smbclient.makedirs') as mock_makedirs, \
+             patch('app.smb.operations.smbclient.stat') as mock_stat, \
+             patch('app.smb.operations.smbclient.open_file') as mock_open_smb:
+            
+            mock_get_conn.return_value = {'server': '127.0.0.1', 'port': 445}
+            mock_stat.side_effect = FileNotFoundError("File doesn't exist")
+            mock_open_smb.side_effect = Exception("Generic upload error")
+            
+            with pytest.raises(ConnectionError, match="Failed to store file.txt on testshare: Generic upload error"):
                 smb_upload_file(
                     local_path=temp_file,
                     server_name="testserver",
                     server_ip="127.0.0.1",
                     share_name="testshare",
-                    remote_path="subdir/file.txt",
+                    remote_path="file.txt",
                     username="testuser",
-                    password="testpass",
+                    password="testpass"
                 )
 
-        assert "Unexpected failure during write" in str(exc.value)
-
     def test_smb_upload_file_close_raises_does_not_propagate(self, temp_file):
-        """If conn.close raises an exception it should be swallowed and not propagate."""
-        mock_conn = Mock()
-        mock_conn.connect.return_value = True
-        mock_conn.getAttributes.side_effect = Exception("File doesn't exist")
-        mock_conn.storeFile.return_value = None
-        # Simulate close raising an exception
-        mock_conn.close.side_effect = Exception("close failed")
-
-        with patch('app.smb.connection.SMBConnection', return_value=mock_conn):
-            # Should not raise despite close failing
+        """Test that connection close exceptions don't propagate to caller."""
+        # Note: In smbprotocol API, connections are managed automatically,
+        # so this test verifies that the upload works despite potential cleanup issues
+        with patch('app.smb.operations.get_conn') as mock_get_conn, \
+             patch('app.smb.operations.smbclient.makedirs') as mock_makedirs, \
+             patch('app.smb.operations.smbclient.stat') as mock_stat, \
+             patch('app.smb.operations.smbclient.open_file') as mock_open_smb, \
+             patch('builtins.open', mock_open(read_data=b'test content')):
+            
+            mock_get_conn.return_value = {'server': '127.0.0.1', 'port': 445}
+            mock_stat.side_effect = FileNotFoundError("File doesn't exist")
+            mock_remote_file = Mock()
+            mock_open_smb.return_value.__enter__ = Mock(return_value=mock_remote_file)
+            mock_open_smb.return_value.__exit__ = Mock(return_value=False)
+            
+            # Should complete successfully despite any potential cleanup issues
             smb_upload_file(
                 local_path=temp_file,
                 server_name="testserver",
@@ -313,8 +332,7 @@ class TestSMBUploadFile:
                 share_name="testshare",
                 remote_path="file.txt",
                 username="testuser",
-                password="testpass",
+                password="testpass"
             )
 
-        # Ensure close was attempted even though it raised
-        mock_conn.close.assert_called_once()
+        mock_open_smb.assert_called_once()

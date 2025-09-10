@@ -2,17 +2,17 @@
 
 import logging
 import os
-from smb.SMBConnection import SMBConnection
+import smbclient
 from .connection import get_conn
 
 logger = logging.getLogger(__name__)
 
 
-def ensure_dirs(conn: SMBConnection, share_name: str, dir_path: str) -> None:
+def ensure_dirs(server: str, share_name: str, dir_path: str) -> None:
     """Ensure that directories exist on the SMB share, creating them if needed.
     
     Args:
-        conn: Active SMB connection
+        server: SMB server (IP or hostname)
         share_name: Name of the SMB share
         dir_path: Directory path to ensure exists
     """
@@ -20,34 +20,23 @@ def ensure_dirs(conn: SMBConnection, share_name: str, dir_path: str) -> None:
         logger.debug("No directory path specified, skipping directory creation")
         return
         
-    parts = [p for p in dir_path.split("/") if p]
-    logger.debug(f"Ensuring directory structure exists on share '{share_name}': {dir_path} (parts: {parts})")
+    unc_path = f"//{server}/{share_name}/{dir_path.lstrip('/')}"
+    logger.debug(f"Ensuring directory structure exists on share '{share_name}': {unc_path}")
     
-    current_path = ""
-    for part in parts:
-        current_path = f"{current_path}/{part}" if current_path else part
-        try:
-            logger.debug(f"Checking if directory exists: {current_path}")
-            conn.listPath(share_name, current_path)
-            logger.debug(f"Directory exists: {current_path}")
-            continue
-        except Exception:
-            # If listPath fails, attempt to create and ignore errors
-            try:
-                logger.debug(f"Creating directory: {current_path}")
-                conn.createDirectory(share_name, current_path)
-                logger.info(f"Created directory on share '{share_name}': {current_path}")
-            except Exception as create_error:
-                # Some servers auto-create directories or deny listing; ignore
-                logger.debug(f"Directory creation attempt for '{current_path}' resulted in: {create_error}")
-                pass
+    try:
+        logger.debug(f"Creating directory path: {unc_path}")
+        smbclient.makedirs(unc_path, exist_ok=True)
+        logger.info(f"Created directory path on share '{share_name}': {unc_path}")
+    except Exception as create_error:
+        # Some servers auto-create directories or deny listing; log but continue
+        logger.debug(f"Directory creation attempt for '{unc_path}' resulted in: {create_error}")
 
 
-def remote_exists(conn: SMBConnection, share_name: str, path: str) -> bool:
+def remote_exists(server: str, share_name: str, path: str) -> bool:
     """Check if a file exists on the SMB share.
     
     Args:
-        conn: Active SMB connection
+        server: SMB server (IP or hostname) 
         share_name: Name of the SMB share
         path: Path to the file to check
         
@@ -55,22 +44,23 @@ def remote_exists(conn: SMBConnection, share_name: str, path: str) -> bool:
         bool: True if file exists, False otherwise
     """
     try:
-        logger.debug(f"Checking if file exists on share '{share_name}': {path}")
-        conn.getAttributes(share_name, path)
-        logger.debug(f"File exists on share '{share_name}': {path}")
+        unc_path = f"//{server}/{share_name}/{path.lstrip('/')}"
+        logger.debug(f"Checking if file exists on share '{share_name}': {unc_path}")
+        smbclient.stat(unc_path)
+        logger.debug(f"File exists on share '{share_name}': {unc_path}")
         return True
     except Exception as e:
-        logger.debug(f"File does not exist on share '{share_name}': {path} ({e})")
+        logger.debug(f"File does not exist on share '{share_name}': {unc_path} ({e})")
         return False
 
 
 def store(
-    conn: SMBConnection, share_name: str, local: str, remote: str, remote_dir: str
+    server: str, share_name: str, local: str, remote: str, remote_dir: str
 ) -> None:
     """Store a local file to the SMB share.
     
     Args:
-        conn: Active SMB connection
+        server: SMB server (IP or hostname)
         share_name: Name of the SMB share
         local: Local file path to upload
         remote: Remote file path on the share
@@ -79,25 +69,34 @@ def store(
     Raises:
         ConnectionError: If file storage fails
     """
-    logger.info(f"Storing file to share '{share_name}': {local} -> {remote}")
+    unc_path = f"//{server}/{share_name}/{remote.lstrip('/')}"
+    logger.info(f"Storing file to share '{share_name}': {local} -> {unc_path}")
     
-    with open(local, "rb") as fh:
-        try:
-            logger.debug(f"Starting file transfer to share '{share_name}': {remote}")
-            conn.storeFile(share_name, remote, fh)
-            logger.info(f"File successfully stored to share '{share_name}': {remote}")
-        except Exception as err:
-            logger.error(f"Failed to store file to share '{share_name}': {remote} - {err}")
-            msg = str(err).lower()
-            if remote_dir and (
-                "unable to open" in msg
-                or "no such file" in msg
-                or "path not found" in msg
-            ):
-                raise ConnectionError(
-                    f"Failed to store {remote} on {share_name}: Directory path may not exist. Original error: {err}"
-                )
-            raise ConnectionError(f"Failed to store {remote} on {share_name}: {err}")
+    try:
+        logger.debug(f"Starting file transfer to share '{share_name}': {unc_path}")
+        with open(local, "rb") as local_file:
+            with smbclient.open_file(unc_path, "wb") as remote_file:
+                # Copy file in chunks
+                chunk_size = 65536  # 64KB chunks
+                while True:
+                    chunk = local_file.read(chunk_size)
+                    if not chunk:
+                        break
+                    remote_file.write(chunk)
+        
+        logger.info(f"File successfully stored to share '{share_name}': {unc_path}")
+    except Exception as err:
+        logger.error(f"Failed to store file to share '{share_name}': {unc_path} - {err}")
+        msg = str(err).lower()
+        if remote_dir and (
+            "unable to open" in msg
+            or "no such file" in msg
+            or "path not found" in msg
+        ):
+            raise ConnectionError(
+                f"Failed to store {remote} on {share_name}: Directory path may not exist. Original error: {err}"
+            )
+        raise ConnectionError(f"Failed to store {remote} on {share_name}: {err}")
 
 
 def smb_upload_file(
@@ -141,7 +140,7 @@ def smb_upload_file(
     remote_dir = os.path.dirname(remote_path)
     
     try:
-        conn = get_conn(
+        conn_info = get_conn(
             username,
             password,
             server_name,
@@ -150,22 +149,17 @@ def smb_upload_file(
             port,
             use_ntlm_v2,
         )
-        try:
-            ensure_dirs(conn, share_name, remote_dir)
+        
+        server = conn_info['server']
+        
+        ensure_dirs(server, share_name, remote_dir)
 
-            if not overwrite and remote_exists(conn, share_name, remote_path):
-                logger.warning(f"File already exists and overwrite=False: {remote_path}")
-                raise FileExistsError(f"Remote file already exists: {remote_path}")
+        if not overwrite and remote_exists(server, share_name, remote_path):
+            logger.warning(f"File already exists and overwrite=False: {remote_path}")
+            raise FileExistsError(f"Remote file already exists: {remote_path}")
 
-            store(conn, share_name, local_path, remote_path, remote_dir)
-            logger.info(f"SMB upload completed successfully: {remote_path}")
-            
-        finally:
-            try:
-                logger.debug("Closing SMB connection")
-                conn.close()
-            except Exception as close_error:
-                logger.warning(f"Error closing SMB connection: {close_error}")
+        store(server, share_name, local_path, remote_path, remote_dir)
+        logger.info(f"SMB upload completed successfully: {remote_path}")
                 
     except Exception as e:
         logger.error(f"SMB upload failed: {e}")

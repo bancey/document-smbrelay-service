@@ -1,7 +1,7 @@
 """SMB connection management for the SMB Relay Service."""
 
 import logging
-from smb.SMBConnection import SMBConnection
+import smbclient
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +14,8 @@ def get_conn(
     domain: str = "",
     port: int = 445,
     use_ntlm_v2: bool = True,
-) -> SMBConnection:
-    """Create and establish an SMB connection.
+) -> dict:
+    """Create and establish an SMB connection using smbprotocol.
     
     Args:
         username: SMB username
@@ -27,11 +27,14 @@ def get_conn(
         use_ntlm_v2: Whether to use NTLMv2 authentication (default: True)
         
     Returns:
-        SMBConnection: Connected SMB connection object
+        dict: Connection info with server details
         
     Raises:
         ConnectionError: If connection to SMB server fails
     """
+    # Use IP address if provided, otherwise use server_name
+    server = server_ip or server_name
+    
     logger.info(
         f"Attempting SMB connection to {server_name} ({server_ip}:{port}) "
         f"with user '{username}'{f' in domain {domain}' if domain else ''}, "
@@ -39,27 +42,32 @@ def get_conn(
     )
     
     try:
-        conn = SMBConnection(
-            username,
-            password,
-            "fastapi-smb-relay",
-            server_name,
-            domain=domain,
-            use_ntlm_v2=use_ntlm_v2,
+        # Construct username with domain if provided  
+        auth_username = f"{domain}\\{username}" if domain else username
+        
+        # Register session with smbclient
+        logger.debug(f"Registering SMB session for {server}:{port}")
+        session = smbclient.register_session(
+            server=server,
+            username=auth_username,
+            password=password,
+            port=port,
+            auth_protocol='ntlm' if use_ntlm_v2 else 'negotiate',
         )
         
-        logger.debug(f"SMBConnection object created, attempting connection to {server_ip}:{port}")
+        logger.info(f"SMB session established successfully to {server_name} ({server_ip}:{port})")
         
-        if not conn.connect(server_ip, port):
-            logger.error(f"SMB connection failed to {server_name} ({server_ip}:{port})")
-            raise ConnectionError("Could not connect to SMB server")
-        
-        logger.info(f"SMB connection established successfully to {server_name} ({server_ip}:{port})")
-        return conn
+        return {
+            'server': server,
+            'port': port,
+            'session': session,
+            'server_name': server_name,
+            'server_ip': server_ip
+        }
         
     except Exception as e:
         logger.error(f"SMB connection error to {server_name} ({server_ip}:{port}): {e}")
-        raise
+        raise ConnectionError(f"Could not connect to SMB server: {e}")
 
 
 def check_smb_health(
@@ -90,7 +98,7 @@ def check_smb_health(
     logger.info(f"Starting SMB health check for share '{share_name}' on {server_name} ({server_ip}:{port})")
     
     try:
-        conn = get_conn(
+        conn_info = get_conn(
             username,
             password,
             server_name,
@@ -99,25 +107,22 @@ def check_smb_health(
             port,
             use_ntlm_v2,
         )
-        try:
-            # Test basic share access by listing root directory
-            logger.debug(f"Testing share access by listing root directory of '{share_name}'")
-            conn.listPath(share_name, "/")
-            
-            logger.info(f"SMB health check successful - share '{share_name}' is accessible")
-            return {
-                "status": "healthy",
-                "smb_connection": "ok",
-                "smb_share_accessible": True,
-                "server": f"{server_name} ({server_ip}:{port})",
-                "share": share_name
-            }
-        finally:
-            try:
-                logger.debug("Closing SMB connection")
-                conn.close()
-            except Exception as close_error:
-                logger.warning(f"Error closing SMB connection: {close_error}")
+        
+        # Test basic share access by listing root directory
+        server = conn_info['server']
+        unc_path = f"//{server}/{share_name}/"
+        
+        logger.debug(f"Testing share access by listing root directory of '{share_name}' at {unc_path}")
+        smbclient.listdir(unc_path)
+        
+        logger.info(f"SMB health check successful - share '{share_name}' is accessible")
+        return {
+            "status": "healthy",
+            "smb_connection": "ok",
+            "smb_share_accessible": True,
+            "server": f"{server_name} ({server_ip}:{port})",
+            "share": share_name
+        }
                 
     except Exception as e:
         logger.error(f"SMB health check failed for {server_name} ({server_ip}:{port}), share '{share_name}': {e}")
