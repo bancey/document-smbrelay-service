@@ -1,4 +1,4 @@
-fastapi==0.116.1
+fastapi==0.118.0
 uvicorn[standard]==0.35.0
 smbprotocol==1.15.0
 python-multipart==0.0.20
