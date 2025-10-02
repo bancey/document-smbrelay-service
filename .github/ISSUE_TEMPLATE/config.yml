@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Community Discussion
+    url: https://github.com/bancey/document-smbrelay-service/discussions
+    about: Ask questions and discuss ideas with the community
+  - name: Security Issues
+    url: mailto:security@example.com
+    about: Report security vulnerabilities privately (replace with actual contact)
