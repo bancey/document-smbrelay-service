@@ -198,11 +198,27 @@ curl http://localhost:8080/health | jq
 docker-compose down
 ```
 
-See [DOCKER_TESTING.md](./DOCKER_TESTING.md) for comprehensive Docker testing documentation, including:
-- Development setup with hot-reload
-- Multiple testing scenarios
-- Troubleshooting guide
-- Performance testing examples
+**Testing DFS Connectivity**
+
+For testing with a simulated DFS environment (multiple file servers):
+
+```bash
+# Start DFS environment with namespace server and file servers
+docker-compose -f docker-compose.dfs.yml up -d
+
+# Test upload through DFS namespace
+curl -X POST http://localhost:8080/upload \
+  -F file=@test.txt \
+  -F remote_path=test.txt
+
+# Stop DFS environment
+docker-compose -f docker-compose.dfs.yml down
+```
+
+See documentation:
+- [DOCKER_TESTING.md](./DOCKER_TESTING.md) - Basic Docker testing (single SMB server)
+- [DFS_TESTING.md](./DFS_TESTING.md) - DFS testing with multiple servers
+- [DFS_KERBEROS.md](./DFS_KERBEROS.md) - Production DFS and Kerberos setup
 
 **Validation & Manual Tests (recommended after changes)**
 - **Basic syntax & import checks**:

@@ -2,6 +2,10 @@
 
 This guide explains how to test the Document SMB Relay Service locally using Docker Compose with a containerized SMB server.
 
+**📁 Related Guides:**
+- **[DFS_TESTING.md](./DFS_TESTING.md)** - Testing with simulated DFS environment (multiple file servers)
+- **[DFS_KERBEROS.md](./DFS_KERBEROS.md)** - Production Windows DFS and Kerberos setup
+
 ## Quick Start
 
 ### Basic Testing Setup
@@ -46,6 +50,24 @@ docker-compose down
 To also remove the volumes (delete uploaded files):
 ```bash
 docker-compose down -v
+```
+
+## DFS Testing
+
+For testing with a simulated DFS environment (DFS namespace + multiple file servers), see **[DFS_TESTING.md](./DFS_TESTING.md)**.
+
+Quick DFS test:
+```bash
+# Start DFS environment
+docker-compose -f docker-compose.dfs.yml up -d
+
+# Test upload
+curl -X POST http://localhost:8080/upload \
+  -F file=@test.txt \
+  -F remote_path=test.txt
+
+# Stop
+docker-compose -f docker-compose.dfs.yml down
 ```
 
 ## Development Setup with Hot-Reload

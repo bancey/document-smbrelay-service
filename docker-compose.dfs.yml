@@ -1,0 +1,149 @@
+# DFS Testing with Docker Compose
+#
+# This setup simulates a Windows DFS environment with:
+# - A DFS namespace server
+# - Two file servers (targets)
+# - SMB Relay Service
+#
+# NOTE: This is a simulation of DFS behavior. True Windows DFS requires Active Directory
+# and domain controllers. This setup demonstrates the concept and allows testing of
+# the service's ability to handle multiple SMB servers.
+
+services:
+  # DFS Namespace Server (simulated)
+  # In a real Windows DFS, this would be a domain controller with DFS namespace service
+  dfs-namespace:
+    image: dperson/samba:latest
+    container_name: dfs-namespace
+    hostname: dfs-namespace
+    ports:
+      - "445:445"
+    environment:
+      # Create test user
+      - USER=testuser;testpass
+      # Create DFS root share that references other servers
+      # In real DFS, this would contain referral information
+      - SHARE=dfs-root;/dfs-root;yes;no;no;testuser;testuser;;DFS Root Namespace
+      - WORKGROUP=TESTDOMAIN
+    volumes:
+      - dfs-namespace-data:/dfs-root
+    networks:
+      dfs-network:
+        aliases:
+          - dfs.testdomain.local
+    restart: unless-stopped
+
+  # File Server 1 (DFS Target)
+  # This simulates a file server that would be referenced by DFS
+  fileserver1:
+    image: dperson/samba:latest
+    container_name: fileserver1
+    hostname: fileserver1
+    environment:
+      - USER=testuser;testpass
+      # Documents share on server 1
+      - SHARE=documents;/share/documents;yes;no;no;testuser;testuser;;Documents on Server 1
+      # Projects share on server 1
+      - SHARE2=projects;/share/projects;yes;no;no;testuser;testuser;;Projects on Server 1
+      - WORKGROUP=TESTDOMAIN
+    volumes:
+      - fileserver1-data:/share
+    networks:
+      dfs-network:
+        aliases:
+          - fileserver1.testdomain.local
+    restart: unless-stopped
+
+  # File Server 2 (DFS Target)
+  # This provides redundancy and load balancing (DFS feature)
+  fileserver2:
+    image: dperson/samba:latest
+    container_name: fileserver2
+    hostname: fileserver2
+    environment:
+      - USER=testuser;testpass
+      # Documents share on server 2 (redundant with server 1)
+      - SHARE=documents;/share/documents;yes;no;no;testuser;testuser;;Documents on Server 2
+      # Archive share on server 2
+      - SHARE2=archive;/share/archive;yes;no;no;testuser;testuser;;Archive on Server 2
+      - WORKGROUP=TESTDOMAIN
+    volumes:
+      - fileserver2-data:/share
+    networks:
+      dfs-network:
+        aliases:
+          - fileserver2.testdomain.local
+    restart: unless-stopped
+
+  # SMB Relay Service configured for DFS namespace
+  smb-relay-dfs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smb-relay-dfs
+    ports:
+      - "8080:8080"
+    environment:
+      # Point to DFS namespace server
+      - SMB_SERVER_NAME=dfs-namespace
+      - SMB_SERVER_IP=dfs-namespace
+      - SMB_SHARE_NAME=dfs-root
+      - SMB_USERNAME=testuser
+      - SMB_PASSWORD=testpass
+      - SMB_DOMAIN=TESTDOMAIN
+      - SMB_PORT=445
+      - SMB_AUTH_PROTOCOL=negotiate
+      - LOG_LEVEL=DEBUG
+    networks:
+      - dfs-network
+    depends_on:
+      - dfs-namespace
+      - fileserver1
+      - fileserver2
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+
+  # Alternative relay service configuration pointing directly to fileserver1
+  # Uncomment to test direct file server access vs DFS namespace
+  # smb-relay-direct:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: smb-relay-direct
+  #   ports:
+  #     - "8081:8080"
+  #   environment:
+  #     - SMB_SERVER_NAME=fileserver1
+  #     - SMB_SERVER_IP=fileserver1
+  #     - SMB_SHARE_NAME=documents
+  #     - SMB_USERNAME=testuser
+  #     - SMB_PASSWORD=testpass
+  #     - SMB_DOMAIN=TESTDOMAIN
+  #     - SMB_PORT=445
+  #     - SMB_AUTH_PROTOCOL=negotiate
+  #     - LOG_LEVEL=DEBUG
+  #   networks:
+  #     - dfs-network
+  #   depends_on:
+  #     - fileserver1
+  #   restart: unless-stopped
+
+networks:
+  dfs-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+
+volumes:
+  dfs-namespace-data:
+    driver: local
+  fileserver1-data:
+    driver: local
+  fileserver2-data:
+    driver: local
