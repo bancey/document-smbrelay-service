@@ -41,6 +41,7 @@ class TestSMBUploadFile:
             "",  # domain
             445,  # port
             True,  # use_ntlm_v2
+            None,  # auth_protocol
         )
         
         # Verify directory creation was attempted for "test"
@@ -234,6 +235,7 @@ class TestSMBUploadFile:
             "TESTDOMAIN",
             139,
             False,
+            None,  # auth_protocol
         )
 
     def test_smb_upload_file_directory_creation_permission_error(self, temp_file):

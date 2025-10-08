@@ -408,6 +408,7 @@ class TestHealthEndpoint:
             "",  # domain
             445,  # port
             True,  # use_ntlm_v2
+            "ntlm",  # auth_protocol
         )
 
     def test_health_smb_connection_failure(self, client, smb_env_vars):

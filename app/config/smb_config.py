@@ -8,7 +8,7 @@ def load_smb_config_from_env():
     (config_dict, missing_list).
 
     config_dict contains: server_name, server_ip, share_name, username,
-    password, domain, port, use_ntlm_v2
+    password, domain, port, use_ntlm_v2, auth_protocol
     
     Returns:
         tuple: (config_dict, missing_list) where config_dict contains all 
@@ -27,18 +27,31 @@ def load_smb_config_from_env():
         "true",
         "yes",
     )
+    
+    # Auth protocol: negotiate (default), ntlm, or kerberos
+    auth_protocol = os.environ.get("SMB_AUTH_PROTOCOL", "").lower()
+    if auth_protocol not in ("negotiate", "ntlm", "kerberos", ""):
+        auth_protocol = ""
+    
+    # If not explicitly set, derive from use_ntlm_v2 for backward compatibility
+    if not auth_protocol:
+        auth_protocol = "ntlm" if use_ntlm_v2 else "negotiate"
 
-    missing = [
-        k
-        for k, v in (
-            ("SMB_SERVER_NAME", server_name),
-            ("SMB_SERVER_IP", server_ip),
-            ("SMB_SHARE_NAME", share_name),
+    # For Kerberos, username and password are optional (can use cached credentials)
+    # For other auth methods, username and password are required
+    required_fields = [
+        ("SMB_SERVER_NAME", server_name),
+        ("SMB_SERVER_IP", server_ip),
+        ("SMB_SHARE_NAME", share_name),
+    ]
+    
+    if auth_protocol != "kerberos":
+        required_fields.extend([
             ("SMB_USERNAME", username),
             ("SMB_PASSWORD", password),
-        )
-        if not v
-    ]
+        ])
+    
+    missing = [k for k, v in required_fields if not v]
 
     config = {
         "server_name": server_name,
@@ -49,6 +62,7 @@ def load_smb_config_from_env():
         "domain": domain,
         "port": port,
         "use_ntlm_v2": use_ntlm_v2,
+        "auth_protocol": auth_protocol,
     }
 
     return config, missing

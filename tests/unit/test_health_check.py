@@ -39,6 +39,7 @@ class TestCheckSMBHealth:
             "",  # domain
             445,  # port
             True,  # use_ntlm_v2
+            None,  # auth_protocol
         )
         mock_listdir.assert_called_once_with("//127.0.0.1/testshare/")
 
@@ -140,6 +141,7 @@ class TestCheckSMBHealth:
             "MYDOMAIN",  # domain
             139,         # port
             False,       # use_ntlm_v2
+            None,        # auth_protocol
         )
 
     def test_check_smb_health_generic_error(self):

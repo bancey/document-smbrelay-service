@@ -7,6 +7,13 @@
 
 # Documentation
 README.md
+DFS_KERBEROS.md
+DFS_TESTING.md
+DOCKER_TESTING.md
+
+# Docker files (not needed in image)
+docker-compose*.yml
+Dockerfile.dev
 
 # Testing
 tests/

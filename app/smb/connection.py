@@ -14,17 +14,19 @@ def get_conn(
     domain: str = "",
     port: int = 445,
     use_ntlm_v2: bool = True,
+    auth_protocol: str = None,
 ) -> dict:
     """Create and establish an SMB connection using smbprotocol.
     
     Args:
-        username: SMB username
-        password: SMB password  
+        username: SMB username (optional for Kerberos)
+        password: SMB password (optional for Kerberos)
         server_name: NetBIOS name of the SMB server
         server_ip: IP address of the SMB server
         domain: SMB domain/workgroup (optional)
         port: SMB port (default: 445)
-        use_ntlm_v2: Whether to use NTLMv2 authentication (default: True)
+        use_ntlm_v2: Whether to use NTLMv2 authentication (default: True, deprecated)
+        auth_protocol: Authentication protocol - 'negotiate', 'ntlm', or 'kerberos' (default: None)
         
     Returns:
         dict: Connection info with server details
@@ -35,24 +37,33 @@ def get_conn(
     # Use IP address if provided, otherwise use server_name
     server = server_ip or server_name
     
+    # Determine auth protocol - prefer explicit auth_protocol over use_ntlm_v2
+    if auth_protocol is None:
+        auth_protocol = 'ntlm' if use_ntlm_v2 else 'negotiate'
+    
     logger.info(
         f"Attempting SMB connection to {server_name} ({server_ip}:{port}) "
-        f"with user '{username}'{f' in domain {domain}' if domain else ''}, "
-        f"NTLMv2={'enabled' if use_ntlm_v2 else 'disabled'}"
+        f"with auth protocol '{auth_protocol}'"
+        f"{f', user \"{username}\"' if username else ''}"
+        f"{f' in domain \"{domain}\"' if domain else ''}"
     )
     
     try:
-        # Construct username with domain if provided  
-        auth_username = f"{domain}\\{username}" if domain else username
+        # Construct username with domain if provided (for NTLM)
+        # For Kerberos, username can be None to use cached credentials
+        if username and domain and auth_protocol != 'kerberos':
+            auth_username = f"{domain}\\{username}"
+        else:
+            auth_username = username
         
         # Register session with smbclient
-        logger.debug(f"Registering SMB session for {server}:{port}")
+        logger.debug(f"Registering SMB session for {server}:{port} with auth_protocol={auth_protocol}")
         session = smbclient.register_session(
             server=server,
             username=auth_username,
             password=password,
             port=port,
-            auth_protocol='ntlm' if use_ntlm_v2 else 'negotiate',
+            auth_protocol=auth_protocol,
         )
         
         logger.info(f"SMB session established successfully to {server_name} ({server_ip}:{port})")
@@ -79,6 +90,7 @@ def check_smb_health(
     domain: str = "",
     port: int = 445,
     use_ntlm_v2: bool = True,
+    auth_protocol: str = None,
 ) -> dict:
     """Check SMB server connectivity and share accessibility.
     
@@ -86,11 +98,12 @@ def check_smb_health(
         server_name: NetBIOS name of the SMB server
         server_ip: IP address of the SMB server
         share_name: Name of the SMB share
-        username: SMB username
-        password: SMB password
+        username: SMB username (optional for Kerberos)
+        password: SMB password (optional for Kerberos)
         domain: SMB domain/workgroup (optional)
         port: SMB port (default: 445)
-        use_ntlm_v2: Whether to use NTLMv2 authentication (default: True)
+        use_ntlm_v2: Whether to use NTLMv2 authentication (default: True, deprecated)
+        auth_protocol: Authentication protocol - 'negotiate', 'ntlm', or 'kerberos' (default: None)
         
     Returns:
         dict: Health check result with status information
@@ -106,6 +119,7 @@ def check_smb_health(
             domain,
             port,
             use_ntlm_v2,
+            auth_protocol,
         )
         
         # Test basic share access by listing root directory
