@@ -177,6 +177,33 @@ docker run --rm -p 8080:8080 \
 
 Note: Docker builds in sandboxed/test environments may fail due to SSL/network restrictions; this is environment-specific.
 
+**Docker Compose (Local Development & Testing)**
+
+For local development and testing with a containerized SMB server:
+
+```bash
+# Start both SMB server and relay service
+docker-compose up -d
+
+# Upload a test file
+echo "Hello World" > test.txt
+curl -X POST http://localhost:8080/upload \
+  -F file=@test.txt \
+  -F remote_path=test.txt
+
+# Check service health
+curl http://localhost:8080/health | jq
+
+# Stop services
+docker-compose down
+```
+
+See [DOCKER_TESTING.md](./DOCKER_TESTING.md) for comprehensive Docker testing documentation, including:
+- Development setup with hot-reload
+- Multiple testing scenarios
+- Troubleshooting guide
+- Performance testing examples
+
 **Validation & Manual Tests (recommended after changes)**
 - **Basic syntax & import checks**:
 
