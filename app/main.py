@@ -84,6 +84,7 @@ async def health():
         config["domain"],
         config["port"],
         config["use_ntlm_v2"],
+        config["auth_protocol"],
     )
 
     # Add app status to health response
@@ -128,6 +129,7 @@ async def upload(
             config["port"],
             config["use_ntlm_v2"],
             overwrite,
+            config["auth_protocol"],
         )
     except FileExistsError as e:
         raise HTTPException(status_code=409, detail=str(e))

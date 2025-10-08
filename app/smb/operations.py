@@ -111,6 +111,7 @@ def smb_upload_file(
     port: int = 445,
     use_ntlm_v2: bool = True,
     overwrite: bool = False,
+    auth_protocol: str = None,
 ):
     """Upload a local file to an SMB share.
     
@@ -120,12 +121,13 @@ def smb_upload_file(
         server_ip: IP address of the SMB server
         share_name: Name of the SMB share
         remote_path: Path on the SMB share where file will be stored
-        username: SMB username
-        password: SMB password
+        username: SMB username (optional for Kerberos)
+        password: SMB password (optional for Kerberos)
         domain: SMB domain/workgroup (optional)
         port: SMB port (default: 445)
-        use_ntlm_v2: Whether to use NTLMv2 authentication (default: True)
+        use_ntlm_v2: Whether to use NTLMv2 authentication (default: True, deprecated)
         overwrite: Whether to overwrite existing files (default: False)
+        auth_protocol: Authentication protocol - 'negotiate', 'ntlm', or 'kerberos' (default: None)
         
     Raises:
         FileExistsError: If file exists and overwrite is False
@@ -148,6 +150,7 @@ def smb_upload_file(
             domain,
             port,
             use_ntlm_v2,
+            auth_protocol,
         )
         
         server = conn_info['server']

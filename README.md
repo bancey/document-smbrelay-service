@@ -56,18 +56,68 @@ uvicorn app.main:app --host 0.0.0.0 --port 8080
 - `SMB_SERVER_NAME`: NetBIOS name of the SMB server
 - `SMB_SERVER_IP`: IP address or hostname of the SMB server
 - `SMB_SHARE_NAME`: Name of the SMB share (for example `Documents`)
-- `SMB_USERNAME`: SMB username
-- `SMB_PASSWORD`: SMB password
+- `SMB_USERNAME`: SMB username (optional when using Kerberos authentication)
+- `SMB_PASSWORD`: SMB password (optional when using Kerberos authentication)
 
 **Optional Environment Variables**
 - `SMB_DOMAIN`: SMB domain/workgroup (default: empty)
 - `SMB_PORT`: SMB port (default: `445`)
-- `SMB_USE_NTLM_V2`: `true|false` (default: `true`)
+- `SMB_USE_NTLM_V2`: `true|false` (default: `true`, deprecated - use `SMB_AUTH_PROTOCOL` instead)
+- `SMB_AUTH_PROTOCOL`: Authentication protocol - `negotiate|ntlm|kerberos` (default: derived from `SMB_USE_NTLM_V2`)
 - `LOG_LEVEL`: Application log level - `DEBUG|INFO|WARNING|ERROR|CRITICAL` (default: `INFO`)
+
+**Authentication Methods**
+
+This service supports three authentication protocols:
+
+1. **NTLM** (default): Username/password authentication using NTLM protocol
+   - Set `SMB_AUTH_PROTOCOL=ntlm` or `SMB_USE_NTLM_V2=true`
+   - Requires `SMB_USERNAME` and `SMB_PASSWORD`
+
+2. **Negotiate**: Automatic protocol negotiation (NTLM or Kerberos)
+   - Set `SMB_AUTH_PROTOCOL=negotiate` or `SMB_USE_NTLM_V2=false`
+   - Requires `SMB_USERNAME` and `SMB_PASSWORD`
+
+3. **Kerberos**: Kerberos authentication for Active Directory environments
+   - Set `SMB_AUTH_PROTOCOL=kerberos`
+   - `SMB_USERNAME` and `SMB_PASSWORD` are optional (can use system Kerberos ticket cache)
+   - Ideal for Windows DFS shares with domain authentication
+
+**Windows DFS Support**
+
+This service **fully supports Windows Distributed File System (DFS)** shares. The underlying `smbprotocol` library automatically handles DFS referrals and path resolution.
+
+To use with Windows DFS:
+- Set `SMB_SERVER_NAME` to your DFS namespace server (e.g., `dfs.example.com`)
+- Set `SMB_SHARE_NAME` to the DFS share name
+- Use Kerberos authentication for best results with domain-joined environments
+- The service will automatically follow DFS referrals to the actual file server
+
+**Example: Windows DFS with Kerberos**
+
+```bash
+# Using system Kerberos ticket cache (e.g., after kinit)
+SMB_SERVER_NAME=dfs.corp.example.com \
+SMB_SERVER_IP=dfs.corp.example.com \
+SMB_SHARE_NAME=documents \
+SMB_AUTH_PROTOCOL=kerberos \
+uvicorn app.main:app --host 0.0.0.0 --port 8080
+
+# Or with explicit credentials
+SMB_SERVER_NAME=dfs.corp.example.com \
+SMB_SERVER_IP=dfs.corp.example.com \
+SMB_SHARE_NAME=documents \
+SMB_USERNAME=myuser \
+SMB_PASSWORD=mypassword \
+SMB_DOMAIN=CORP \
+SMB_AUTH_PROTOCOL=kerberos \
+uvicorn app.main:app --host 0.0.0.0 --port 8080
+```
 
 **Notes on running**
 - The app will start without the SMB env vars, but upload attempts will return a 500 explaining which variables are missing.
 - Using the example `127.0.0.1` test values will usually produce a connection error (expected in local dev if no SMB server is running).
+- For Kerberos authentication, ensure proper Kerberos configuration (`/etc/krb5.conf`) and valid tickets if using ticket cache.
 
 **API**
 - **GET** `/health` — health check endpoint
