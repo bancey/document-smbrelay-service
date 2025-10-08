@@ -73,7 +73,7 @@ ALWAYS test the complete workflow when making changes:
 
 **4. Run automated test suite**:
 ```bash
-# Run unit tests (fast, ~44 tests)
+# Run unit tests (fast, ~53 tests)
 ./run_tests.sh unit
 
 # Run all tests if Docker is available
@@ -103,13 +103,46 @@ The service requires these environment variables to operate:
 - `SMB_SERVER_NAME`: NetBIOS name of the SMB server
 - `SMB_SERVER_IP`: IP address or hostname of the SMB server  
 - `SMB_SHARE_NAME`: Name of the SMB share (e.g., "Documents")
-- `SMB_USERNAME`: SMB username for authentication
-- `SMB_PASSWORD`: SMB password for authentication
+- `SMB_USERNAME`: SMB username for authentication (optional for Kerberos)
+- `SMB_PASSWORD`: SMB password for authentication (optional for Kerberos)
 
 Optional environment variables:
 - `SMB_DOMAIN`: SMB domain/workgroup (default: empty)
 - `SMB_PORT`: SMB port (default: 445)
-- `SMB_USE_NTLM_V2`: Enable NTLMv2 authentication (default: true)
+- `SMB_USE_NTLM_V2`: Enable NTLMv2 authentication (default: true, deprecated - use SMB_AUTH_PROTOCOL instead)
+- `SMB_AUTH_PROTOCOL`: Authentication protocol - `negotiate|ntlm|kerberos` (default: derived from SMB_USE_NTLM_V2)
+
+## Authentication and DFS Support
+
+### Authentication Methods
+
+The service supports three authentication protocols:
+
+1. **NTLM** (default): Username/password authentication using NTLM protocol
+   - Set `SMB_AUTH_PROTOCOL=ntlm` or `SMB_USE_NTLM_V2=true`
+   - Requires `SMB_USERNAME` and `SMB_PASSWORD`
+
+2. **Negotiate**: Automatic protocol negotiation (NTLM or Kerberos)
+   - Set `SMB_AUTH_PROTOCOL=negotiate` or `SMB_USE_NTLM_V2=false`
+   - Requires `SMB_USERNAME` and `SMB_PASSWORD`
+
+3. **Kerberos**: Kerberos authentication for Active Directory environments
+   - Set `SMB_AUTH_PROTOCOL=kerberos`
+   - `SMB_USERNAME` and `SMB_PASSWORD` are optional (can use system Kerberos ticket cache)
+   - Ideal for Windows DFS shares with domain authentication
+
+### Windows DFS Support
+
+**The service fully supports Windows Distributed File System (DFS) shares.** The underlying `smbprotocol` library automatically handles DFS referrals and path resolution. No special configuration is needed - simply point the service to a DFS namespace server and share.
+
+Example for Windows DFS with Kerberos:
+```bash
+SMB_SERVER_NAME=dfs.corp.example.com \
+SMB_SERVER_IP=dfs.corp.example.com \
+SMB_SHARE_NAME=documents \
+SMB_AUTH_PROTOCOL=kerberos \
+uvicorn app.main:app --host 0.0.0.0 --port 8080
+```
 
 ## API Endpoints and Usage
 
