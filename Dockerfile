@@ -19,6 +19,13 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
+# Install runtime libraries for Kerberos/GSSAPI support
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libkrb5-3 \
+    libgssapi-krb5-2 \
+    libsasl2-2 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy installed packages from builder stage
 COPY --from=builder /root/.local /root/.local
 
