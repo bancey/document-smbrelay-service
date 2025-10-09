@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libkrb5-3 \
     libgssapi-krb5-2 \
     libsasl2-2 \
+    krb5-user \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from builder stage
@@ -31,6 +32,10 @@ COPY --from=builder /root/.local /root/.local
 
 # Copy application code
 COPY app /app/app
+
+# Copy startup script
+COPY startup.sh /app/startup.sh
+RUN chmod +x /app/startup.sh
 
 ENV PYTHONUNBUFFERED=1
 
@@ -46,4 +51,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)" || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["/app/startup.sh"]
