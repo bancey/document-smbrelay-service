@@ -47,6 +47,9 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install Kerberos development libraries
+        run: sudo apt-get update && sudo apt-get install -y gcc libkrb5-dev
+
       - name: Cache pip dependencies
         uses: actions/cache@v4
         with:
