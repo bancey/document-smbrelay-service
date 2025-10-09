@@ -2,7 +2,11 @@
 
 A minimal FastAPI service that accepts file uploads and writes them directly to an SMB share without mounting it on the host.
 
-Requirements
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines, setup instructions, and how to submit pull requests.
+
+## Requirements
 
 - Python 3.10+
 - `pip install -r requirements.txt`
