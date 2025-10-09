@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libkrb5-dev \
     libsasl2-dev \
+    python-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
