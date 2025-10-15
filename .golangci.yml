@@ -1,0 +1,122 @@
+# golangci-lint configuration
+# See https://golangci-lint.run/usage/configuration/
+
+run:
+  # Timeout for analysis
+  timeout: 5m
+  
+  # Include test files
+  tests: true
+  
+  # Modules download mode
+  modules-download-mode: readonly
+
+# Output configuration
+output:
+  # Colored output
+  colored-line-number: true
+  
+  # Print lines of code with issue
+  print-issued-lines: true
+  
+  # Print linter name in issue line
+  print-linter-name: true
+
+# Linters settings
+linters-settings:
+  errcheck:
+    # Check type assertions
+    check-type-assertions: true
+    # Check blank assignments
+    check-blank: true
+    
+  govet:
+    # Enable all analyzers
+    enable-all: true
+    
+  gocyclo:
+    # Minimal cyclomatic complexity to report
+    min-complexity: 15
+    
+  dupl:
+    # Minimum token count to detect duplicate code
+    threshold: 100
+    
+  goconst:
+    # Minimal length of string constant
+    min-len: 3
+    # Minimum occurrences to report
+    min-occurrences: 3
+    
+  misspell:
+    # Locale for spell checking
+    locale: US
+    
+  lll:
+    # Max line length
+    line-length: 120
+    
+  goimports:
+    # Put local imports after third-party packages
+    local-prefixes: github.com/bancey/document-smbrelay-service
+    
+  gocritic:
+    # Enable multiple checks by tags
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+      - experimental
+      - opinionated
+
+# Enabled linters
+linters:
+  enable:
+    - errcheck      # Check for unchecked errors
+    - gosimple      # Simplify code
+    - govet         # Vet examines Go source code
+    - ineffassign   # Detect ineffectual assignments
+    - staticcheck   # Static analysis
+    - unused        # Check for unused code
+    - gocyclo       # Cyclomatic complexity
+    - gofmt         # Check formatting
+    - misspell      # Find spelling mistakes
+    - goconst       # Find repeated strings
+    - dupl          # Code clone detection
+    - lll           # Long lines
+    - nakedret      # Naked returns
+    - prealloc      # Slice preallocation
+    - exportloopref # Check for loop variable capture
+    - goimports     # Check imports formatting
+    - revive        # Fast, configurable linter
+    - gosec         # Security checks
+  
+  disable:
+    - typecheck     # Disabled due to generics issues in some Go versions
+
+# Issues configuration
+issues:
+  # Exclude some linters from running on tests files
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - lll
+    
+    # Exclude known issues in generated code
+    - path: vendor/
+      linters:
+        - all
+    
+  # Maximum issues count per one linter
+  max-issues-per-linter: 50
+  
+  # Maximum count of issues with the same text
+  max-same-issues: 3
+  
+  # Show only new issues
+  new: false

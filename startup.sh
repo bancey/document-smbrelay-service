@@ -1,6 +1,7 @@
-#!/bin/bash
+#!/bin/sh
 
-# Generate krb5.conf from environment variables
+# Generate krb5.conf from environment variables if Kerberos is configured
+if [ ! -z "$KRB5_DEFAULT_REALM" ]; then
 cat > /etc/krb5.conf << EOF
 [libdefaults]
     default_realm = ${KRB5_DEFAULT_REALM}
@@ -25,12 +26,14 @@ EOF
 fi
 
 # Add domain realm mappings
+if [ ! -z "$KRB5_DOMAIN" ]; then
 cat >> /etc/krb5.conf << EOF
 
 [domain_realm]
     .${KRB5_DOMAIN} = ${KRB5_DEFAULT_REALM}
     ${KRB5_DOMAIN} = ${KRB5_DEFAULT_REALM}
 EOF
+fi
 
 echo "Generated /etc/krb5.conf:"
 cat /etc/krb5.conf
@@ -42,6 +45,7 @@ if [ ! -z "$KRB5_KEYTAB_BASE64" ]; then
     chmod 600 /etc/krb5.keytab
     echo "Keytab created at /etc/krb5.keytab"
 fi
+fi
 
-# Start the application
-exec uvicorn app.main:app --host 0.0.0.0 --port 8080
+# Start the Go application
+exec /app/server

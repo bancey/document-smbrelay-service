@@ -42,47 +42,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          python-version: '3.13'
+          go-version: '1.21'
+          cache: true
 
-      - name: Install Kerberos development libraries
-        run: sudo apt-get update && sudo apt-get install -y gcc libkrb5-dev
+      - name: Download dependencies
+        run: go mod download
 
-      - name: Cache pip dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install dependencies
+      - name: Validate code
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-test.txt
+          go fmt ./...
+          go vet ./...
+          go build -o bin/server ./cmd/server
 
-      - name: Fix Samba permissions for integration tests
-        run: |
-          # Wait for Samba service to be ready
-          sleep 10
-          # Fix the share directory permissions so that the SMB user can create directories
-          docker exec $(docker ps --filter "ancestor=dperson/samba:latest" --format "{{.ID}}") chown smbuser:smb /mnt/testshare
-          docker exec $(docker ps --filter "ancestor=dperson/samba:latest" --format "{{.ID}}") chmod 775 /mnt/testshare
-
-      - name: Validate code syntax
-        run: |
-          python -m py_compile app/main.py
-          python -c "import app.main; print('Import successful')"
-
-      - name: Run tests with coverage
+      - name: Run tests
         env:
-          CI_SMB_PORT: 1445
-          CI_SMB_SERVER_IP: localhost
+          SMB_SERVER_NAME: testserver
+          SMB_SERVER_IP: localhost
+          SMB_SHARE_NAME: testshare
+          SMB_USERNAME: testuser
+          SMB_PASSWORD: testpass
+          SMB_PORT: 1445
         run: |
-          python -m pytest --tb=short --cov=app --cov-report=xml --cov-report=term-missing
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Generate coverage report
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
 
       - name: SonarCloud Scan
         uses: SonarSource/sonarqube-scan-action@v6.0.0
@@ -130,7 +118,7 @@ jobs:
             type=ref,event=tag
           labels: |
             org.opencontainers.image.title=Document SMB Relay Service
-            org.opencontainers.image.description=A FastAPI service that accepts file uploads and writes them to SMB shares
+            org.opencontainers.image.description=A Go-based HTTP service that accepts file uploads and writes them to SMB shares
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6

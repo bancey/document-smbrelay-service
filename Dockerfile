@@ -1,54 +1,49 @@
-# Build stage - install dependencies that require compilation
-FROM python:3.13-slim AS builder
+# Build stage
+FROM golang:1.21-alpine AS builder
 
-# Install build deps for pysmb
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libkrb5-dev \
-    libsasl2-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Install build dependencies
+RUN apk add --no-cache git
 
 WORKDIR /app
 
-# Copy requirements and install Python packages
-COPY requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir --user -r /app/requirements.txt
+# Copy go mod files
+COPY go.mod go.sum ./
 
-# Runtime stage - minimal image without build dependencies
-FROM python:3.13-slim
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server
+
+# Runtime stage - minimal image
+FROM alpine:latest
 
 WORKDIR /app
 
-# Install runtime libraries for Kerberos/GSSAPI support
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libkrb5-3 \
-    libgssapi-krb5-2 \
-    libsasl2-2 \
-    krb5-user \
-    && rm -rf /var/lib/apt/lists/*
+# Install runtime dependencies including smbclient for SMB operations
+# ca-certificates: for HTTPS
+# krb5-libs: for Kerberos authentication support
+# samba-client: provides smbclient binary for SMB operations with DFS support
+RUN apk --no-cache add ca-certificates krb5-libs samba-client
 
-# Copy installed packages from builder stage
-COPY --from=builder /root/.local /root/.local
+# Copy the binary from builder
+COPY --from=builder /app/server /app/server
 
-# Copy application code
-COPY app /app/app
+# Copy startup script if it exists
+COPY startup.sh /app/startup.sh 2>/dev/null || true
+RUN chmod +x /app/startup.sh 2>/dev/null || true
 
-# Copy startup script
-COPY startup.sh /app/startup.sh
-RUN chmod +x /app/startup.sh
-
-ENV PYTHONUNBUFFERED=1
-
-# Configure default log level (can be overridden at runtime)
+ENV PORT=8080
 ENV LOG_LEVEL=INFO
-
-# Make sure scripts in .local are usable
-ENV PATH=/root/.local/bin:$PATH
 
 EXPOSE 8080
 
-# Health check configuration  
+# Health check configuration
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5)" || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-CMD ["/app/startup.sh"]
+# Use startup script if it exists, otherwise run the binary directly
+CMD ["/app/server"]

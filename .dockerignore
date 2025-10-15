@@ -6,43 +6,21 @@
 .github/
 
 # Documentation
-README.md
-DFS_KERBEROS.md
-DFS_TESTING.md
-DOCKER_TESTING.md
+*.md
 
 # Docker files (not needed in image)
 docker-compose*.yml
 Dockerfile.dev
 
-# Testing
-tests/
-requirements-test.txt
-run_tests.sh
-pytest.ini
-.pytest_cache/
-.coverage
-.coveragerc
-htmlcov/
-coverage.xml
+# Go test files and test data
+*_test.go
+testdata/
 
 # Code analysis and quality tools
 sonar-project.properties
 
 # Dependency management
 renovate.json
-
-# Python cache and compiled files
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-
-# Virtual environments
-.venv/
-venv/
-.env
-env/
 
 # IDE and editor files
 .vscode/
@@ -55,10 +33,14 @@ env/
 .DS_Store
 Thumbs.db
 
-# Build artifacts
-build/
+# Go build artifacts
+bin/
 dist/
-*.egg-info/
+*.exe
+*.exe~
+*.dll
+*.dylib
+server
 
 # Logs
 *.log
@@ -66,3 +48,11 @@ dist/
 # Temporary files
 *.tmp
 .cache/
+
+# Environment files
+.env
+.env.*
+
+# Build scripts (already in image)
+build.sh
+Makefile
