@@ -35,7 +35,9 @@ func setupTestApp() *fiber.App {
 
 	app.Use(recover.New())
 	app.Get("/health", handlers.HealthHandler)
+	app.Get("/list", handlers.ListHandler)
 	app.Post("/upload", handlers.UploadHandler)
+	app.Delete("/delete", handlers.DeleteHandler)
 	app.Get("/openapi.json", handlers.GetOpenAPISpec)
 	app.Get("/docs", handlers.ServeSwaggerUI)
 
@@ -318,5 +320,172 @@ func TestIntegration_ContentTypes(t *testing.T) {
 				t.Errorf("Expected Content-Type to contain %s, got %s", tt.contentType, contentType)
 			}
 		})
+	}
+}
+
+func TestIntegration_ListEndpoint(t *testing.T) {
+	// Set up environment
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "127.0.0.1")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+
+	app := setupTestApp()
+
+	req := httptest.NewRequest("GET", "/list", nil)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("Failed to test list endpoint: %v", err)
+	}
+
+	// With invalid SMB server, we expect 500
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Errorf("Expected status %d for connection failure, got %d", fiber.StatusInternalServerError, resp.StatusCode)
+	}
+}
+
+func TestIntegration_ListEndpointWithPath(t *testing.T) {
+	// Set up environment
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "127.0.0.1")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+
+	app := setupTestApp()
+
+	req := httptest.NewRequest("GET", "/list?path=subfolder", nil)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("Failed to test list endpoint with path: %v", err)
+	}
+
+	// With invalid SMB server, we expect 500
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Errorf("Expected status %d for connection failure, got %d", fiber.StatusInternalServerError, resp.StatusCode)
+	}
+}
+
+func TestIntegration_ListEndpointWithoutConfig(t *testing.T) {
+	// Clear environment to test missing config
+	os.Clearenv()
+
+	app := setupTestApp()
+
+	req := httptest.NewRequest("GET", "/list", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to test list endpoint: %v", err)
+	}
+
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Errorf("Expected status %d for missing config, got %d", fiber.StatusInternalServerError, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Missing SMB configuration") {
+		t.Errorf("Expected missing config error, got: %s", string(body))
+	}
+}
+
+func TestIntegration_DeleteEndpoint(t *testing.T) {
+	// Set up environment
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "127.0.0.1")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+
+	app := setupTestApp()
+
+	req := httptest.NewRequest("DELETE", "/delete?path=folder/file.txt", nil)
+	resp, err := app.Test(req, 5000)
+	if err != nil {
+		t.Fatalf("Failed to test delete endpoint: %v", err)
+	}
+
+	// With invalid SMB server, we expect 500
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Errorf("Expected status %d for connection failure, got %d", fiber.StatusInternalServerError, resp.StatusCode)
+	}
+}
+
+func TestIntegration_DeleteEndpointMissingPath(t *testing.T) {
+	// Set up environment
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "127.0.0.1")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+
+	app := setupTestApp()
+
+	req := httptest.NewRequest("DELETE", "/delete", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to test delete endpoint: %v", err)
+	}
+
+	if resp.StatusCode != fiber.StatusBadRequest {
+		t.Errorf("Expected status %d for missing path, got %d", fiber.StatusBadRequest, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "path is required") {
+		t.Errorf("Expected 'path is required' error, got: %s", string(body))
+	}
+}
+
+func TestIntegration_DeleteEndpointWithoutConfig(t *testing.T) {
+	// Clear environment to test missing config
+	os.Clearenv()
+
+	app := setupTestApp()
+
+	req := httptest.NewRequest("DELETE", "/delete?path=test.txt", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to test delete endpoint: %v", err)
+	}
+
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Errorf("Expected status %d for missing config, got %d", fiber.StatusInternalServerError, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Missing SMB configuration") {
+		t.Errorf("Expected missing config error, got: %s", string(body))
+	}
+}
+
+func TestIntegration_OpenAPIIncludesAllEndpoints(t *testing.T) {
+	app := setupTestApp()
+
+	req := httptest.NewRequest("GET", "/openapi.json", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to test openapi endpoint: %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+
+	// Verify all endpoints are documented
+	requiredEndpoints := []string{
+		"/health",
+		"/list",
+		"/upload",
+		"/delete",
+	}
+
+	for _, endpoint := range requiredEndpoints {
+		if !strings.Contains(bodyStr, `"`+endpoint+`"`) {
+			t.Errorf("Expected OpenAPI spec to document endpoint '%s'", endpoint)
+		}
 	}
 }
