@@ -61,15 +61,6 @@ jobs:
         SMB_PASSWORD: testpass
         LOG_LEVEL: ERROR
     
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      if: matrix.go-version == '1.22'
-      with:
-        file: ./coverage.out
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
-    
     - name: Generate coverage report
       if: matrix.go-version == '1.22'
       run: go tool cover -html=coverage.out -o coverage.html
