@@ -356,7 +356,15 @@ make clean
 
 ## Contributing
 
-Contributions welcome! Please ensure:
+We welcome contributions! Please see our [CONTRIBUTING.md](CONTRIBUTING.md) guide for details on:
+
+- Setting up your development environment
+- Code standards and best practices
+- Testing guidelines
+- Pull request process
+- Issue reporting guidelines
+
+Quick checklist:
 1. Code is formatted with `go fmt`
 2. All tests pass: `go test ./...`
 3. Update documentation as needed

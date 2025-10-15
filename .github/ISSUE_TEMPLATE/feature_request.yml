@@ -1,0 +1,102 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a new feature! Please provide as much detail as possible to help us understand your request.
+
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: Feature Description
+      description: A clear and concise description of the feature you'd like to see
+      placeholder: Describe the feature...
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or Use Case
+      description: What problem does this feature solve? What's your use case?
+      placeholder: |
+        I need to... because...
+        This would help with...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: How would you like to see this feature implemented?
+      placeholder: |
+        The feature could work by...
+        API endpoint: POST /new-endpoint
+        Configuration: SMB_NEW_SETTING=value
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Are there alternative solutions or workarounds you've considered?
+      placeholder: |
+        Alternative 1: ...
+        Alternative 2: ...
+
+  - type: dropdown
+    id: feature-type
+    attributes:
+      label: Feature Type
+      description: What type of feature is this?
+      options:
+        - New API endpoint
+        - Configuration option
+        - Performance improvement
+        - Authentication/Security
+        - Monitoring/Observability
+        - Developer experience
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How important is this feature to you?
+      options:
+        - Critical - Blocking my use of the service
+        - High - Would significantly improve my workflow
+        - Medium - Nice to have
+        - Low - Minor enhancement
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other context, code examples, or screenshots about the feature request
+      placeholder: |
+        Example usage:
+        ```bash
+        curl -X POST http://localhost:8080/new-endpoint ...
+        ```
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please verify the following
+      options:
+        - label: I have searched for existing feature requests similar to this
+          required: true
+        - label: This feature aligns with the project's goals
+          required: true
+        - label: I would be willing to help implement this feature
+          required: false
