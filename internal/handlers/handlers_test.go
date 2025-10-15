@@ -653,3 +653,153 @@ func TestHealthHandler_JSONStructure(t *testing.T) {
 	// which already validates JSON structure without attempting real SMB connections
 	t.Skip("Skipping redundant test - JSON structure validated in TestHealthHandler_WithConfig")
 }
+
+// ============================================================================
+// List Handler Tests
+// ============================================================================
+
+func TestListHandler_MissingConfig(t *testing.T) {
+	// Clear all SMB environment variables
+	os.Clearenv()
+
+	app := fiber.New()
+	app.Get("/list", ListHandler)
+
+	req := httptest.NewRequest("GET", "/list", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to test list endpoint: %v", err)
+	}
+
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Errorf("Expected status %d, got %d", fiber.StatusInternalServerError, resp.StatusCode)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(body), "Missing SMB configuration") {
+		t.Errorf("Expected missing config message in response, got: %s", string(body))
+	}
+}
+
+func TestListHandler_WithConfig(t *testing.T) {
+	// Set up test environment variables
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "127.0.0.1")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+
+	app := fiber.New()
+	app.Get("/list", ListHandler)
+
+	req := httptest.NewRequest("GET", "/list", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("Failed to test list endpoint: %v", err)
+	}
+
+	// With invalid SMB server, we expect 500 for connection failure
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Errorf("Expected status %d for connection failure, got %d", fiber.StatusInternalServerError, resp.StatusCode)
+	}
+}
+
+func TestListHandler_WithPath(t *testing.T) {
+	// Set up test environment variables
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "127.0.0.1")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+
+	app := fiber.New()
+	app.Get("/list", ListHandler)
+
+	req := httptest.NewRequest("GET", "/list?path=subfolder", nil)
+	resp, err := app.Test(req, -1)
+	if err != nil {
+		t.Fatalf("Failed to test list endpoint: %v", err)
+	}
+
+	// With invalid SMB server, we expect 500 for connection failure
+	if resp.StatusCode != fiber.StatusInternalServerError {
+		t.Errorf("Expected status %d for connection failure, got %d", fiber.StatusInternalServerError, resp.StatusCode)
+	}
+}
+
+func TestListHandler_VariousPathFormats(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "127.0.0.1")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+
+	testPaths := []string{
+		"",
+		"folder",
+		"folder/subfolder",
+		"/leading/slash",
+		"path-with-dashes",
+		"path_with_underscores",
+	}
+
+	for _, path := range testPaths {
+		t.Run("path_"+path, func(t *testing.T) {
+			app := fiber.New()
+			app.Get("/list", ListHandler)
+
+			url := "/list"
+			if path != "" {
+				url = "/list?path=" + path
+			}
+
+			req := httptest.NewRequest("GET", url, nil)
+			resp, err := app.Test(req, -1)
+			if err != nil {
+				t.Fatalf("Failed to test list endpoint: %v", err)
+			}
+
+			// With invalid SMB server, expect 500
+			if resp.StatusCode != fiber.StatusInternalServerError {
+				t.Logf("Path %s returned status %d", path, resp.StatusCode)
+			}
+		})
+	}
+}
+
+// Test OpenAPI spec includes the /list endpoint
+func TestGetOpenAPISpec_IncludesListEndpoint(t *testing.T) {
+	app := fiber.New()
+	app.Get("/openapi.json", GetOpenAPISpec)
+
+	req := httptest.NewRequest("GET", "/openapi.json", nil)
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to test openapi endpoint: %v", err)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	bodyStr := string(body)
+
+	// Verify /list endpoint is documented
+	requiredElements := []string{
+		`"/list"`,
+		`"get"`,
+		`"path"`,
+		`"query"`,
+		`"files"`,
+		`"name"`,
+		`"size"`,
+		`"is_dir"`,
+		`"timestamp"`,
+	}
+
+	for _, elem := range requiredElements {
+		if !strings.Contains(bodyStr, elem) {
+			t.Errorf("Expected OpenAPI spec to contain '%s' for /list endpoint", elem)
+		}
+	}
+}

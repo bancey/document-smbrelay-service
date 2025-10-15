@@ -156,6 +156,55 @@ Health check endpoint that verifies application and SMB connectivity.
 }
 ```
 
+### GET /list
+
+List files and folders at a given path on the SMB share.
+
+**Query Parameters**:
+- `path`: Optional path within the SMB share (defaults to root)
+
+**Response (200 OK)**:
+```json
+{
+  "path": "subfolder",
+  "files": [
+    {
+      "name": "document.pdf",
+      "size": 1024,
+      "is_dir": false,
+      "timestamp": "Mon Jan 1 12:34:56 2024"
+    },
+    {
+      "name": "reports",
+      "size": 0,
+      "is_dir": true,
+      "timestamp": "Mon Jan 1 10:00:00 2024"
+    }
+  ]
+}
+```
+
+**Response (404 Not Found)** - path does not exist:
+```json
+{
+  "detail": "path not found: nonexistent"
+}
+```
+
+**Response (403 Forbidden)** - access denied:
+```json
+{
+  "detail": "access denied to path: protected"
+}
+```
+
+**Response (500 Internal Server Error)**:
+```json
+{
+  "detail": "error message"
+}
+```
+
 ### POST /upload
 
 Upload a file to the SMB share.
@@ -215,6 +264,16 @@ curl -X POST http://localhost:8080/upload \
 ### Check service health
 ```bash
 curl http://localhost:8080/health | jq
+```
+
+### List files in root directory
+```bash
+curl http://localhost:8080/list | jq
+```
+
+### List files in a subdirectory
+```bash
+curl "http://localhost:8080/list?path=subfolder" | jq
 ```
 
 ## Docker

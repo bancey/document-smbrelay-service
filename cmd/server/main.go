@@ -39,6 +39,7 @@ func main() {
 
 	// Routes
 	app.Get("/health", handlers.HealthHandler)
+	app.Get("/list", handlers.ListHandler)
 	app.Post("/upload", handlers.UploadHandler)
 	app.Get("/openapi.json", handlers.GetOpenAPISpec)
 	app.Get("/docs", handlers.ServeSwaggerUI)
