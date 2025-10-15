@@ -41,6 +41,7 @@ func main() {
 	app.Get("/health", handlers.HealthHandler)
 	app.Get("/list", handlers.ListHandler)
 	app.Post("/upload", handlers.UploadHandler)
+	app.Delete("/delete", handlers.DeleteHandler)
 	app.Get("/openapi.json", handlers.GetOpenAPISpec)
 	app.Get("/docs", handlers.ServeSwaggerUI)
 

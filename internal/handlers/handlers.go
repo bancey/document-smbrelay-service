@@ -145,6 +145,55 @@ func UploadHandler(c *fiber.Ctx) error {
 	})
 }
 
+// DeleteHandler handles DELETE /delete requests
+func DeleteHandler(c *fiber.Ctx) error {
+	// Load configuration
+	cfg, missing := config.LoadFromEnv()
+	if len(missing) > 0 {
+		missingVars := strings.Join(missing, ", ")
+		errorMsg := fmt.Sprintf("Missing SMB configuration environment variables: %s", missingVars)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"detail": errorMsg,
+		})
+	}
+
+	// Get path from query parameter
+	remotePath := c.Query("path")
+	if remotePath == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"detail": "path is required",
+		})
+	}
+
+	// Delete file from SMB share
+	err := smb.DeleteFile(remotePath, cfg)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"detail": err.Error(),
+			})
+		}
+		if strings.Contains(err.Error(), "access denied") {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"detail": err.Error(),
+			})
+		}
+		if strings.Contains(err.Error(), "invalid remote path") || strings.Contains(err.Error(), "cannot delete directory") {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"detail": err.Error(),
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"detail": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"status": "ok",
+		"path":   remotePath,
+	})
+}
+
 // GetOpenAPISpec returns the OpenAPI specification
 func GetOpenAPISpec(c *fiber.Ctx) error {
 	spec := map[string]interface{}{
@@ -273,6 +322,55 @@ func GetOpenAPISpec(c *fiber.Ctx) error {
 						},
 						"500": map[string]interface{}{
 							"description": "Upload failed",
+						},
+					},
+				},
+			},
+			"/delete": map[string]interface{}{
+				"delete": map[string]interface{}{
+					"summary":     "Delete file from SMB share",
+					"description": "Deletes a file at the specified path on the SMB share",
+					"parameters": []map[string]interface{}{
+						{
+							"name":        "path",
+							"in":          "query",
+							"description": "Path to the file within the SMB share",
+							"required":    true,
+							"schema": map[string]interface{}{
+								"type": "string",
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "File deleted successfully",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"status": map[string]interface{}{
+												"type": "string",
+											},
+											"path": map[string]interface{}{
+												"type": "string",
+											},
+										},
+									},
+								},
+							},
+						},
+						"400": map[string]interface{}{
+							"description": "Invalid path or attempting to delete directory",
+						},
+						"403": map[string]interface{}{
+							"description": "Access denied",
+						},
+						"404": map[string]interface{}{
+							"description": "File not found",
+						},
+						"500": map[string]interface{}{
+							"description": "Server error",
 						},
 					},
 				},

@@ -10,6 +10,13 @@ import (
 	"github.com/bancey/document-smbrelay-service/internal/config"
 )
 
+// Test constants for SMB status codes
+const (
+	testStatusObjectNameNotFound = "NT_STATUS_OBJECT_NAME_NOT_FOUND"
+	testStatusAccessDenied       = "NT_STATUS_ACCESS_DENIED"
+	testStatusFileIsADirectory   = "NT_STATUS_FILE_IS_A_DIRECTORY"
+)
+
 func TestUploadFile_InvalidServer(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
@@ -855,7 +862,7 @@ func TestListFiles_PathNotFound(t *testing.T) {
 	// Setup mock
 	mockExec := &MockSmbClientExecutor{
 		ExecuteFunc: func(_ []string) (string, error) {
-			return "NT_STATUS_OBJECT_NAME_NOT_FOUND", fmt.Errorf("smbclient command failed")
+			return testStatusObjectNameNotFound, fmt.Errorf("smbclient command failed")
 		},
 	}
 	smbClientExec = mockExec
@@ -888,7 +895,7 @@ func TestListFiles_AccessDenied(t *testing.T) {
 	// Setup mock
 	mockExec := &MockSmbClientExecutor{
 		ExecuteFunc: func(_ []string) (string, error) {
-			return "NT_STATUS_ACCESS_DENIED", fmt.Errorf("smbclient command failed")
+			return testStatusAccessDenied, fmt.Errorf("smbclient command failed")
 		},
 	}
 	smbClientExec = mockExec
@@ -1089,5 +1096,348 @@ func TestListFiles_NormalizePath(t *testing.T) {
 				t.Errorf("Expected normalized path in command, got args: %v", mockExec.LastArgs)
 			}
 		})
+	}
+}
+
+// ============================================================================
+// Delete File Tests
+// ============================================================================
+
+func TestDeleteFile_Success(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Setup mock that simulates successful delete
+	mockExec := &MockSmbClientExecutor{
+		ExecuteFunc: func(_ []string) (string, error) {
+			return "deleted file successfully", nil
+		},
+	}
+	smbClientExec = mockExec
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	err := DeleteFile("folder/file.txt", cfg)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	// Verify the command that was executed
+	if len(mockExec.LastArgs) == 0 {
+		t.Fatal("Expected command to be executed")
+	}
+	foundCmd := false
+	for _, arg := range mockExec.LastArgs {
+		if strings.Contains(arg, "del") && strings.Contains(arg, "folder/file.txt") {
+			foundCmd = true
+			break
+		}
+	}
+	if !foundCmd {
+		t.Error("Expected 'del' command to be executed")
+	}
+}
+
+func TestDeleteFile_FileNotFound(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Setup mock that simulates file not found
+	mockExec := &MockSmbClientExecutor{
+		ExecuteFunc: func(_ []string) (string, error) {
+			return testStatusObjectNameNotFound, fmt.Errorf("smbclient command failed")
+		},
+	}
+	smbClientExec = mockExec
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	err := DeleteFile("nonexistent.txt", cfg)
+	if err == nil {
+		t.Fatal("Expected error for non-existent file")
+	}
+
+	if !strings.Contains(err.Error(), "file not found") {
+		t.Errorf("Expected 'file not found' error, got: %v", err)
+	}
+}
+
+func TestDeleteFile_AccessDenied(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Setup mock that simulates access denied
+	mockExec := &MockSmbClientExecutor{
+		ExecuteFunc: func(_ []string) (string, error) {
+			return testStatusAccessDenied, fmt.Errorf("smbclient command failed")
+		},
+	}
+	smbClientExec = mockExec
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	err := DeleteFile("protected.txt", cfg)
+	if err == nil {
+		t.Fatal("Expected error for access denied")
+	}
+
+	if !strings.Contains(err.Error(), "access denied") {
+		t.Errorf("Expected 'access denied' error, got: %v", err)
+	}
+}
+
+func TestDeleteFile_IsDirectory(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Setup mock that simulates attempting to delete a directory
+	mockExec := &MockSmbClientExecutor{
+		ExecuteFunc: func(_ []string) (string, error) {
+			return testStatusFileIsADirectory, fmt.Errorf("smbclient command failed")
+		},
+	}
+	smbClientExec = mockExec
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	err := DeleteFile("folder", cfg)
+	if err == nil {
+		t.Fatal("Expected error when deleting directory")
+	}
+
+	if !strings.Contains(err.Error(), "cannot delete directory") {
+		t.Errorf("Expected 'cannot delete directory' error, got: %v", err)
+	}
+}
+
+func TestDeleteFile_EmptyPath(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	mockExec := NewMockExecutor()
+	smbClientExec = mockExec
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	err := DeleteFile("", cfg)
+	if err == nil {
+		t.Fatal("Expected error for empty path")
+	}
+
+	if !strings.Contains(err.Error(), "invalid remote path") {
+		t.Errorf("Expected 'invalid remote path' error, got: %v", err)
+	}
+}
+
+func TestDeleteFile_RootPath(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	mockExec := NewMockExecutor()
+	smbClientExec = mockExec
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	// Test various root path formats
+	testPaths := []string{".", "/", "\\"}
+	for _, path := range testPaths {
+		err := DeleteFile(path, cfg)
+		if err == nil {
+			t.Errorf("Expected error for root path '%s'", path)
+		}
+		if !strings.Contains(err.Error(), "invalid remote path") && !strings.Contains(err.Error(), "cannot delete root") {
+			t.Errorf("Expected 'invalid remote path' error for '%s', got: %v", path, err)
+		}
+	}
+}
+
+func TestDeleteFile_PathNormalization(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	tests := []struct {
+		name       string
+		inputPath  string
+		expectPath string
+	}{
+		{
+			name:       "Forward slash prefix",
+			inputPath:  "/folder/file.txt",
+			expectPath: "folder/file.txt",
+		},
+		{
+			name:       "Backslash prefix",
+			inputPath:  "\\folder\\file.txt",
+			expectPath: "folder/file.txt",
+		},
+		{
+			name:       "Mixed slashes",
+			inputPath:  "folder\\subfolder/file.txt",
+			expectPath: "folder/subfolder/file.txt",
+		},
+		{
+			name:       "No prefix",
+			inputPath:  "folder/file.txt",
+			expectPath: "folder/file.txt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExec := &MockSmbClientExecutor{
+				ExecuteFunc: func(_ []string) (string, error) {
+					return "deleted", nil
+				},
+			}
+			smbClientExec = mockExec
+
+			cfg := &config.SMBConfig{
+				ServerName:   "testserver",
+				ServerIP:     "192.168.1.100",
+				ShareName:    "testshare",
+				Username:     "testuser",
+				Password:     "testpass",
+				Port:         445,
+				AuthProtocol: "ntlm",
+			}
+
+			err := DeleteFile(tt.inputPath, cfg)
+			if err != nil {
+				t.Fatalf("Expected no error, got: %v", err)
+			}
+
+			// Check that the path was normalized in the command
+			if len(mockExec.LastArgs) == 0 {
+				t.Fatal("Expected command to be executed")
+			}
+			foundCmd := false
+			for _, arg := range mockExec.LastArgs {
+				expectedCmd := fmt.Sprintf(`del "%s"`, tt.expectPath)
+				if arg == expectedCmd {
+					foundCmd = true
+					break
+				}
+			}
+			if !foundCmd {
+				t.Errorf("Expected normalized path in command, got args: %v", mockExec.LastArgs)
+			}
+		})
+	}
+}
+
+func TestDeleteFile_SpecialCharactersInPath(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	mockExec := &MockSmbClientExecutor{
+		ExecuteFunc: func(_ []string) (string, error) {
+			return "deleted", nil
+		},
+	}
+	smbClientExec = mockExec
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	// Test paths with special characters
+	testPaths := []string{
+		"file with spaces.txt",
+		"file-with-dashes.txt",
+		"file_with_underscores.txt",
+		"folder/file with spaces.txt",
+	}
+
+	for _, path := range testPaths {
+		err := DeleteFile(path, cfg)
+		if err != nil {
+			t.Errorf("Expected successful delete for path '%s', got error: %v", path, err)
+		}
+	}
+}
+
+func TestDeleteFile_ConnectionError(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Use mock that simulates connection failure
+	smbClientExec = SetupFailureMock("connection_refused")
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "127.0.0.1",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	err := DeleteFile("test.txt", cfg)
+	if err == nil {
+		t.Error("Expected error when deleting from invalid server")
 	}
 }
