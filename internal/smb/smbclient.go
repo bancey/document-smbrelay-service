@@ -22,7 +22,7 @@ type DefaultSmbClientExecutor struct{}
 
 // Execute runs smbclient with the given arguments
 func (e *DefaultSmbClientExecutor) Execute(args []string) (string, error) {
-	cmd := exec.Command("smbclient", args...)
+	cmd := exec.Command("/bin/smbclient", args...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
