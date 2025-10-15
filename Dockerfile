@@ -1,5 +1,5 @@
 # Build stage - install dependencies that require compilation
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
 # Install build deps for pysmb
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,7 +15,7 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --user -r /app/requirements.txt
 
 # Runtime stage - minimal image without build dependencies
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
