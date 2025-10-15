@@ -918,6 +918,7 @@ func TestParseLsOutput(t *testing.T) {
 		name     string
 		output   string
 		expected int
+		validate func(*testing.T, []FileInfo)
 	}{
 		{
 			name: "Standard output with files and folders",
@@ -943,6 +944,56 @@ func TestParseLsOutput(t *testing.T) {
 			output:   "Some error message",
 			expected: 0,
 		},
+		{
+			name: "Filenames with spaces",
+			output: `  .                                   D        0  Mon Jan  1 00:00:00 2024
+  ..                                  D        0  Mon Jan  1 00:00:00 2024
+  Quarterly Report.pdf                A     2048  Mon Jan  1 12:34:56 2024
+  My Documents                        D        0  Mon Jan  1 10:00:00 2024
+  Sales Data 2024.xlsx                A     4096  Mon Jan  1 14:22:33 2024
+  Project Files                       D        0  Mon Jan  1 09:15:00 2024
+
+		65535 blocks of size 1024. 32768 blocks available`,
+			expected: 4,
+			validate: func(t *testing.T, files []FileInfo) {
+				// Verify that filenames with spaces are preserved
+				expectedNames := map[string]bool{
+					"Quarterly Report.pdf": false,
+					"My Documents":         false,
+					"Sales Data 2024.xlsx": false,
+					"Project Files":        false,
+				}
+
+				for _, file := range files {
+					if _, exists := expectedNames[file.Name]; exists {
+						expectedNames[file.Name] = true
+					}
+				}
+
+				for name, found := range expectedNames {
+					if !found {
+						t.Errorf("Expected to find file '%s' but it was not parsed", name)
+					}
+				}
+
+				// Verify specific file attributes
+				for _, file := range files {
+					if file.Name == "Quarterly Report.pdf" {
+						if file.IsDir {
+							t.Errorf("'Quarterly Report.pdf' should not be a directory")
+						}
+						if file.Size != 2048 {
+							t.Errorf("'Quarterly Report.pdf' should have size 2048, got %d", file.Size)
+						}
+					}
+					if file.Name == "My Documents" {
+						if !file.IsDir {
+							t.Errorf("'My Documents' should be a directory")
+						}
+					}
+				}
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -950,6 +1001,13 @@ func TestParseLsOutput(t *testing.T) {
 			files := parseLsOutput(tt.output)
 			if len(files) != tt.expected {
 				t.Errorf("Expected %d files, got %d", tt.expected, len(files))
+				for i, f := range files {
+					t.Logf("File %d: Name='%s', IsDir=%v, Size=%d", i, f.Name, f.IsDir, f.Size)
+				}
+			}
+
+			if tt.validate != nil {
+				tt.validate(t, files)
 			}
 		})
 	}

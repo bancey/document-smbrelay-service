@@ -2,6 +2,8 @@ package smb
 
 import (
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/bancey/document-smbrelay-service/internal/config"
@@ -57,28 +59,34 @@ func parseLsOutput(output string) []FileInfo {
 	lines := strings.Split(output, "\n")
 	files := make([]FileInfo, 0, len(lines))
 
+	// Regex to parse smbclient ls output format:
+	// "  filename                        A     1024  Mon Jan  1 12:34:56 2024"
+	// Captures: (1) filename, (2) attributes, (3) size, (4) timestamp
+	lineRegex := regexp.MustCompile(`^\s+(.+?)\s+([A-Za-z]+)\s+(\d+)\s+(.*)$`)
+
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
+		// Check for empty lines (after trimming)
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
 
-		// Skip header lines
+		// Skip header lines (check before regex matching)
 		if strings.Contains(line, "blocks of size") ||
 			strings.Contains(line, "blocks available") {
 			continue
 		}
 
-		// Parse line format: "  filename                        A     size  timestamp"
-		// or "  dirname                         D        0  timestamp"
-		fields := strings.Fields(line)
-		if len(fields) < 4 {
+		// Use regex to parse the line (don't trim before regex - it needs the leading whitespace)
+		matches := lineRegex.FindStringSubmatch(line)
+		if len(matches) != 5 {
+			// Line doesn't match expected format, skip it
 			continue
 		}
 
-		// First field is the name, second is attributes (D for directory, A for archive)
-		name := fields[0]
-		attributes := fields[1]
+		name := strings.TrimSpace(matches[1])
+		attributes := matches[2]
+		sizeStr := matches[3]
+		timestamp := strings.TrimSpace(matches[4])
 
 		// Skip "." and ".." entries
 		if name == "." || name == ".." {
@@ -86,21 +94,14 @@ func parseLsOutput(output string) []FileInfo {
 		}
 
 		file := FileInfo{
-			Name:  name,
-			IsDir: strings.Contains(attributes, "D"),
+			Name:      name,
+			IsDir:     strings.Contains(attributes, "D"),
+			Timestamp: timestamp,
 		}
 
-		// Try to parse size (third field)
-		if len(fields) >= 3 {
-			var size int64
-			if _, err := fmt.Sscanf(fields[2], "%d", &size); err == nil {
-				file.Size = size
-			}
-		}
-
-		// Timestamp is typically in fields[3:]
-		if len(fields) > 3 {
-			file.Timestamp = strings.Join(fields[3:], " ")
+		// Parse size
+		if size, err := strconv.ParseInt(sizeStr, 10, 64); err == nil {
+			file.Size = size
 		}
 
 		files = append(files, file)
