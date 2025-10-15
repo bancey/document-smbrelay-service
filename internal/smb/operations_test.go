@@ -727,7 +727,7 @@ func TestListFiles_Success(t *testing.T) {
 
 	// Setup mock with custom output
 	mockExec := &MockSmbClientExecutor{
-		ExecuteFunc: func(args []string) (string, error) {
+		ExecuteFunc: func(_ []string) (string, error) {
 			output := `  .                                   D        0  Mon Jan  1 00:00:00 2024
   ..                                  D        0  Mon Jan  1 00:00:00 2024
   document.pdf                        A     1024  Mon Jan  1 12:34:56 2024
@@ -802,7 +802,7 @@ func TestListFiles_WithPath(t *testing.T) {
 
 	// Setup mock
 	mockExec := &MockSmbClientExecutor{
-		ExecuteFunc: func(args []string) (string, error) {
+		ExecuteFunc: func(_ []string) (string, error) {
 			output := `  file1.txt                           A      512  Mon Jan  1 12:00:00 2024
   file2.txt                           A      256  Mon Jan  1 13:00:00 2024
 
@@ -854,7 +854,7 @@ func TestListFiles_PathNotFound(t *testing.T) {
 
 	// Setup mock
 	mockExec := &MockSmbClientExecutor{
-		ExecuteFunc: func(args []string) (string, error) {
+		ExecuteFunc: func(_ []string) (string, error) {
 			return "NT_STATUS_OBJECT_NAME_NOT_FOUND", fmt.Errorf("smbclient command failed")
 		},
 	}
@@ -887,7 +887,7 @@ func TestListFiles_AccessDenied(t *testing.T) {
 
 	// Setup mock
 	mockExec := &MockSmbClientExecutor{
-		ExecuteFunc: func(args []string) (string, error) {
+		ExecuteFunc: func(_ []string) (string, error) {
 			return "NT_STATUS_ACCESS_DENIED", fmt.Errorf("smbclient command failed")
 		},
 	}
@@ -990,7 +990,7 @@ func TestListFiles_NormalizePath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockExec := &MockSmbClientExecutor{
-				ExecuteFunc: func(args []string) (string, error) {
+				ExecuteFunc: func(_ []string) (string, error) {
 					return "", nil
 				},
 			}

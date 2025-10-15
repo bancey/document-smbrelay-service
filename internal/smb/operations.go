@@ -10,9 +10,9 @@ import (
 // FileInfo represents information about a file or directory
 type FileInfo struct {
 	Name      string `json:"name"`
+	Timestamp string `json:"timestamp,omitempty"`
 	Size      int64  `json:"size"`
 	IsDir     bool   `json:"is_dir"`
-	Timestamp string `json:"timestamp,omitempty"`
 }
 
 // ListFiles lists files and folders at the given path on the SMB share
@@ -38,7 +38,8 @@ func ListFiles(remotePath string, cfg *config.SMBConfig) ([]FileInfo, error) {
 	output, err := smbClientExec.Execute(args)
 	if err != nil {
 		// Parse error messages
-		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") || strings.Contains(output, "NT_STATUS_OBJECT_PATH_NOT_FOUND") {
+		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||
+			strings.Contains(output, "NT_STATUS_OBJECT_PATH_NOT_FOUND") {
 			return nil, fmt.Errorf("path not found: %s", remotePath)
 		}
 		if strings.Contains(output, "NT_STATUS_ACCESS_DENIED") {
@@ -53,8 +54,8 @@ func ListFiles(remotePath string, cfg *config.SMBConfig) ([]FileInfo, error) {
 
 // parseLsOutput parses the output from smbclient ls command
 func parseLsOutput(output string) []FileInfo {
-	var files []FileInfo
 	lines := strings.Split(output, "\n")
+	files := make([]FileInfo, 0, len(lines))
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -92,8 +93,9 @@ func parseLsOutput(output string) []FileInfo {
 		// Try to parse size (third field)
 		if len(fields) >= 3 {
 			var size int64
-			fmt.Sscanf(fields[2], "%d", &size)
-			file.Size = size
+			if _, err := fmt.Sscanf(fields[2], "%d", &size); err == nil {
+				file.Size = size
+			}
 		}
 
 		// Timestamp is typically in fields[3:]
