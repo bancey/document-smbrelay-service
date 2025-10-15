@@ -11,10 +11,10 @@ func TestCheckHealth_MissingConfig(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	// Clear environment
 	os.Clearenv()
 
@@ -54,10 +54,10 @@ func TestCheckHealth_InvalidServer(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "nonexistent-server",
 		ServerIP:     "127.0.0.1",
@@ -135,10 +135,10 @@ func TestCheckHealth_ConnectionRefused(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "nonexistent",
 		ServerIP:     "127.0.0.1",
@@ -165,10 +165,10 @@ func TestCheckHealth_EmptyCredentials(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock
 	smbClientExec = NewMockExecutor()
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "testserver",
 		ServerIP:     "127.0.0.1",
@@ -186,7 +186,7 @@ func TestCheckHealth_EmptyCredentials(t *testing.T) {
 	if result.Status != "unhealthy" {
 		t.Errorf("Expected status 'unhealthy', got '%s'", result.Status)
 	}
-	
+
 	if result.Error == "" {
 		t.Error("Expected error message for missing credentials")
 	}
@@ -196,10 +196,10 @@ func TestCheckHealth_ServerDisplay(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "testserver",
 		ServerIP:     "192.168.1.10",
@@ -227,10 +227,10 @@ func TestCheckHealth_CustomPort(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "testserver",
 		ServerIP:     "127.0.0.1",
@@ -258,10 +258,10 @@ func TestCheckHealth_SuccessfulConnection(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates successful connection
 	smbClientExec = SetupSuccessfulMock()
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "testserver",
 		ServerIP:     "192.168.1.100",
@@ -300,10 +300,10 @@ func TestCheckHealth_VariousPorts(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	ports := []int{139, 445, 1445, 8445}
 
 	for _, port := range ports {
@@ -334,10 +334,10 @@ func TestCheckHealth_IPv6Address(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "testserver",
 		ServerIP:     "::1",
@@ -360,10 +360,10 @@ func TestCheckHealth_WithDomain(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "testserver",
 		ServerIP:     "127.0.0.1",
@@ -387,10 +387,10 @@ func TestCheckHealth_EmptyShareName(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "testserver",
 		ServerIP:     "127.0.0.1",
@@ -413,7 +413,7 @@ func TestCheckHealth_Credentials(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	testCases := []struct {
 		name     string
 		username string
@@ -430,7 +430,7 @@ func TestCheckHealth_Credentials(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Use mock that simulates connection failure
 			smbClientExec = SetupFailureMock("connection_refused")
-			
+
 			cfg := &config.SMBConfig{
 				ServerName:   "testserver",
 				ServerIP:     "127.0.0.1",
@@ -456,10 +456,10 @@ func TestCheckHealth_ServerShareInfo(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "fileserver",
 		ServerIP:     "192.168.1.100",
@@ -487,10 +487,10 @@ func TestCheckHealth_HostnameOnly(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "fileserver",
 		ServerIP:     "",
@@ -513,10 +513,10 @@ func TestCheckHealth_ErrorField(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "testserver",
 		ServerIP:     "127.0.0.1",
@@ -539,14 +539,14 @@ func TestCheckHealth_AuthProtocols(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	protocols := []string{"ntlm", "negotiate", "kerberos"}
 
 	for _, protocol := range protocols {
 		t.Run(protocol, func(t *testing.T) {
 			// Use mock that simulates connection failure
 			smbClientExec = SetupFailureMock("connection_refused")
-			
+
 			cfg := &config.SMBConfig{
 				ServerName:   "testserver",
 				ServerIP:     "127.0.0.1",
@@ -572,10 +572,10 @@ func TestCheckHealth_ShareAccessibleDefault(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates successful connection
 	smbClientExec = SetupSuccessfulMock()
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "testserver",
 		ServerIP:     "127.0.0.1",
@@ -598,7 +598,7 @@ func TestCheckHealth_ErrorContainsDetail(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	testCases := []struct {
 		name          string
 		mockType      string
@@ -614,7 +614,7 @@ func TestCheckHealth_ErrorContainsDetail(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Use specific failure mock
 			smbClientExec = SetupFailureMock(tc.mockType)
-			
+
 			cfg := &config.SMBConfig{
 				ServerName:   "testserver",
 				ServerIP:     "127.0.0.1",

@@ -85,7 +85,7 @@ func LoadFromEnv() (*SMBConfig, []string) {
 	if shareName == "" {
 		missing = append(missing, "SMB_SHARE_NAME")
 	}
-	
+
 	// Username and password are only required for non-Kerberos authentication
 	if authProtocol != "kerberos" {
 		if username == "" {

@@ -13,10 +13,10 @@ func TestUploadFile_InvalidServer(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates connection failure
 	smbClientExec = SetupFailureMock("connection_refused")
-	
+
 	// Create a temporary test file
 	tmpDir := os.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test-upload.txt")
@@ -47,10 +47,10 @@ func TestUploadFile_MissingLocalFile(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock
 	smbClientExec = NewMockExecutor()
-	
+
 	cfg := &config.SMBConfig{
 		ServerName:   "testserver",
 		ServerIP:     "127.0.0.1",
@@ -66,7 +66,7 @@ func TestUploadFile_MissingLocalFile(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error when uploading non-existent local file")
 	}
-	
+
 	if err != nil && !contains(err.Error(), "not found") && !contains(err.Error(), "no such file") {
 		t.Logf("Error message: %v", err)
 	}
@@ -76,10 +76,10 @@ func TestUploadFile_RemotePathNormalization(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates successful upload
 	smbClientExec = SetupSuccessfulMock()
-	
+
 	// Create a temporary test file
 	tmpDir := os.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test-upload.txt")
@@ -111,10 +111,10 @@ func TestUploadFile_EmptyRemotePath(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates successful upload
 	smbClientExec = SetupSuccessfulMock()
-	
+
 	// Create a temporary test file
 	tmpDir := os.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test-upload.txt")
@@ -146,10 +146,10 @@ func TestUploadFile_NestedPath(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates successful upload
 	smbClientExec = SetupSuccessfulMock()
-	
+
 	// Create a temporary test file
 	tmpDir := os.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test-upload.txt")
@@ -181,10 +181,10 @@ func TestUploadFile_OverwriteTrue(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates successful upload
 	smbClientExec = SetupSuccessfulMock()
-	
+
 	// Create a temporary test file
 	tmpDir := os.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test-upload.txt")
@@ -216,7 +216,7 @@ func TestUploadFile_OverwriteFalse(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates file exists
 	callCount := 0
 	mock := &MockSmbClientExecutor{
@@ -232,7 +232,7 @@ func TestUploadFile_OverwriteFalse(t *testing.T) {
 		},
 	}
 	smbClientExec = mock
-	
+
 	// Create a temporary test file
 	tmpDir := os.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test-upload.txt")
@@ -258,7 +258,7 @@ func TestUploadFile_OverwriteFalse(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error when file exists and overwrite=false")
 	}
-	
+
 	if err != nil && !contains(err.Error(), "already exists") {
 		t.Errorf("Expected 'already exists' error, got: %v", err)
 	}
@@ -268,23 +268,23 @@ func TestUploadFile_LargeFile(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping large file test in short mode")
 	}
-	
+
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates successful upload
 	smbClientExec = SetupSuccessfulMock()
-	
+
 	// Create a larger temporary test file (1MB)
 	tmpDir := os.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test-large-upload.txt")
-	
+
 	largeContent := make([]byte, 1024*1024) // 1MB
 	for i := range largeContent {
 		largeContent[i] = byte(i % 256)
 	}
-	
+
 	err := os.WriteFile(tmpFile, largeContent, 0644)
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
@@ -312,10 +312,10 @@ func TestUploadFile_SpecialCharactersInPath(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock that simulates successful upload
 	smbClientExec = SetupSuccessfulMock()
-	
+
 	// Create a temporary test file
 	tmpDir := os.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test-upload.txt")
@@ -355,10 +355,10 @@ func TestUploadFile_EmptyConfig(t *testing.T) {
 	// Save original executor and restore after test
 	origExec := smbClientExec
 	defer func() { smbClientExec = origExec }()
-	
+
 	// Use mock
 	smbClientExec = NewMockExecutor()
-	
+
 	// Create a temporary test file
 	tmpDir := os.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test-upload.txt")
@@ -387,9 +387,9 @@ func TestUploadFile_EmptyConfig(t *testing.T) {
 
 // Helper function for string contains check
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && 
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		 containsInner(s, substr)))
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
+		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			containsInner(s, substr)))
 }
 
 func containsInner(s, substr string) bool {

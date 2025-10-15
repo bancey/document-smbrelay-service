@@ -23,20 +23,20 @@ type DefaultSmbClientExecutor struct{}
 // Execute runs smbclient with the given arguments
 func (e *DefaultSmbClientExecutor) Execute(args []string) (string, error) {
 	cmd := exec.Command("smbclient", args...)
-	
+
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	
+
 	err := cmd.Run()
-	
+
 	// Combine stdout and stderr for complete output
 	output := stdout.String() + stderr.String()
-	
+
 	if err != nil {
 		return output, fmt.Errorf("smbclient command failed: %w (output: %s)", err, output)
 	}
-	
+
 	return output, nil
 }
 
@@ -46,7 +46,7 @@ var smbClientExec SmbClientExecutor = &DefaultSmbClientExecutor{}
 // buildSmbClientArgs constructs the arguments for smbclient command
 func buildSmbClientArgs(cfg *config.SMBConfig, command string) ([]string, error) {
 	args := []string{}
-	
+
 	// Build service name: //server/share
 	server := cfg.ServerIP
 	if server == "" {
@@ -54,22 +54,22 @@ func buildSmbClientArgs(cfg *config.SMBConfig, command string) ([]string, error)
 	}
 	service := fmt.Sprintf("//%s/%s", server, cfg.ShareName)
 	args = append(args, service)
-	
+
 	// Add IP address if specified
 	if cfg.ServerIP != "" && cfg.ServerName != "" {
 		args = append(args, "-I", cfg.ServerIP)
 	}
-	
+
 	// Add port if not default
 	if cfg.Port != 445 {
 		args = append(args, "-p", fmt.Sprintf("%d", cfg.Port))
 	}
-	
+
 	// Add domain/workgroup if specified
 	if cfg.Domain != "" {
 		args = append(args, "-W", cfg.Domain)
 	}
-	
+
 	// Handle authentication based on protocol
 	switch strings.ToLower(cfg.AuthProtocol) {
 	case "kerberos":
@@ -89,15 +89,15 @@ func buildSmbClientArgs(cfg *config.SMBConfig, command string) ([]string, error)
 	default:
 		return nil, fmt.Errorf("unsupported authentication protocol: %s", cfg.AuthProtocol)
 	}
-	
+
 	// Disable prompts
 	args = append(args, "-N")
-	
+
 	// Add the command to execute
 	if command != "" {
 		args = append(args, "-c", command)
 	}
-	
+
 	return args, nil
 }
 
@@ -107,7 +107,7 @@ func testConnection(cfg *config.SMBConfig) error {
 	if err != nil {
 		return err
 	}
-	
+
 	output, err := smbClientExec.Execute(args)
 	if err != nil {
 		// Parse error message to provide more context
@@ -125,7 +125,7 @@ func testConnection(cfg *config.SMBConfig) error {
 		}
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -134,15 +134,15 @@ func uploadFileViaSmbClient(localPath string, remotePath string, cfg *config.SMB
 	// Normalize remote path - remove leading slash
 	remotePath = strings.TrimPrefix(remotePath, "/")
 	remotePath = strings.TrimPrefix(remotePath, "\\")
-	
+
 	// Convert backslashes to forward slashes for consistency
 	remotePath = strings.ReplaceAll(remotePath, "\\", "/")
-	
+
 	// Check if local file exists
 	if _, err := os.Stat(localPath); os.IsNotExist(err) {
 		return fmt.Errorf("local file not found: %s", localPath)
 	}
-	
+
 	// Ensure parent directories exist by creating them first
 	remoteDir := filepath.Dir(remotePath)
 	if remoteDir != "." && remoteDir != "" {
@@ -155,20 +155,20 @@ func uploadFileViaSmbClient(localPath string, remotePath string, cfg *config.SMB
 		// Ignore errors - directory might already exist
 		_, _ = smbClientExec.Execute(args)
 	}
-	
+
 	// Build the put command
 	// Change to the directory containing the file first, then use relative path
 	localDir := filepath.Dir(localPath)
 	localFile := filepath.Base(localPath)
-	
+
 	// Build command: lcd <localdir>; put <localfile> <remotepath>
 	command := fmt.Sprintf("lcd \"%s\"; put \"%s\" \"%s\"", localDir, localFile, remotePath)
-	
+
 	args, err := buildSmbClientArgs(cfg, command)
 	if err != nil {
 		return err
 	}
-	
+
 	output, err := smbClientExec.Execute(args)
 	if err != nil {
 		// Parse error messages
@@ -183,11 +183,11 @@ func uploadFileViaSmbClient(localPath string, remotePath string, cfg *config.SMB
 		}
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
-	
+
 	// Check if the output indicates success
 	if !strings.Contains(output, "putting file") && !strings.Contains(output, "put") {
 		return fmt.Errorf("upload may have failed: unexpected output")
 	}
-	
+
 	return nil
 }

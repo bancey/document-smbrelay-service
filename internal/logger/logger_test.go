@@ -223,18 +223,18 @@ func TestLogLevelHierarchy(t *testing.T) {
 // Test all log level variations
 func TestLogLevel_AllVariations(t *testing.T) {
 	tests := []struct {
-		envValue      string
-		shouldDebug   bool
-		shouldInfo    bool
-		shouldWarn    bool
-		shouldError   bool
+		envValue    string
+		shouldDebug bool
+		shouldInfo  bool
+		shouldWarn  bool
+		shouldError bool
 	}{
 		{"DEBUG", true, true, true, true},
 		{"INFO", false, true, true, true},
 		{"WARNING", false, false, true, true},
 		{"WARN", false, false, true, true},
 		{"ERROR", false, false, false, true},
-		{"", false, true, true, true}, // Default is INFO
+		{"", false, true, true, true},        // Default is INFO
 		{"INVALID", false, true, true, true}, // Invalid defaults to INFO
 	}
 

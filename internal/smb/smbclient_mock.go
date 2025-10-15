@@ -19,11 +19,11 @@ type MockSmbClientExecutor struct {
 func (m *MockSmbClientExecutor) Execute(args []string) (string, error) {
 	m.LastArgs = args
 	m.CallCount++
-	
+
 	if m.ExecuteFunc != nil {
 		return m.ExecuteFunc(args)
 	}
-	
+
 	// Default behavior: simulate connection refused
 	return "", fmt.Errorf("smbclient command failed: exit status 1 (output: Connection to 127.0.0.1 failed)")
 }
@@ -41,7 +41,7 @@ func SetupSuccessfulMock() *MockSmbClientExecutor {
 			for i, arg := range args {
 				if arg == "-c" && i+1 < len(args) {
 					cmd := args[i+1]
-					
+
 					// Handle ls command
 					if strings.HasPrefix(cmd, "ls") {
 						// If it's just "ls" (health check), return directory listing
@@ -51,19 +51,19 @@ func SetupSuccessfulMock() *MockSmbClientExecutor {
 						// If it's "ls filename" (file existence check), return file not found
 						return "NT_STATUS_NO_SUCH_FILE", fmt.Errorf("smbclient command failed: exit status 1")
 					}
-					
+
 					// Handle put command (upload)
 					if strings.Contains(cmd, "put") {
 						return "putting file test.txt as test.txt (1.0 kb/s) (average 1.0 kb/s)\n", nil
 					}
-					
+
 					// Handle mkdir command
 					if strings.HasPrefix(cmd, "mkdir") {
 						return "", nil
 					}
 				}
 			}
-			
+
 			return "", nil
 		},
 	}

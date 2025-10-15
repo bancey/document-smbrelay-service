@@ -12,7 +12,7 @@ func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, over
 	// Normalize remote path (remove leading slash)
 	remotePath = strings.TrimPrefix(remotePath, "/")
 	remotePath = strings.TrimPrefix(remotePath, "\\")
-	
+
 	// If overwrite is false, we need to check if file exists first
 	// Skip the check if remotePath is empty (uploading to root with original filename)
 	if !overwrite && remotePath != "" {
@@ -22,14 +22,14 @@ func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, over
 		if err != nil {
 			return err
 		}
-		
+
 		output, _ := smbClientExec.Execute(args)
 		// If the file is found in the output, it exists
 		if strings.Contains(output, remotePath) || strings.Contains(output, "blocks of size") {
 			return fmt.Errorf("remote file already exists: %s", remotePath)
 		}
 	}
-	
+
 	// Upload the file
 	return uploadFileViaSmbClient(localPath, remotePath, cfg)
 }

@@ -301,10 +301,10 @@ func TestLoadFromEnv_PartiallyMissing(t *testing.T) {
 		{
 			name: "Only server name missing",
 			envVars: map[string]string{
-				"SMB_SERVER_IP":   "127.0.0.1",
-				"SMB_SHARE_NAME":  "share",
-				"SMB_USERNAME":    "user",
-				"SMB_PASSWORD":    "pass",
+				"SMB_SERVER_IP":  "127.0.0.1",
+				"SMB_SHARE_NAME": "share",
+				"SMB_USERNAME":   "user",
+				"SMB_PASSWORD":   "pass",
 			},
 			expectedCount: 1,
 		},
