@@ -914,6 +914,7 @@ func TestListFiles_AccessDenied(t *testing.T) {
 }
 
 func TestParseLsOutput(t *testing.T) {
+	//nolint:govet // fieldalignment: test struct readability is more important than memory optimization
 	tests := []struct {
 		name     string
 		output   string
