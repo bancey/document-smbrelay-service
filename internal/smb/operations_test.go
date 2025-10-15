@@ -1,8 +1,8 @@
 package smb
 
 import (
-	"os"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
