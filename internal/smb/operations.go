@@ -137,3 +137,41 @@ func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, over
 	// Upload the file
 	return uploadFileViaSmbClient(localPath, remotePath, cfg)
 }
+
+// DeleteFile deletes a file from the SMB share using smbclient
+func DeleteFile(remotePath string, cfg *config.SMBConfig) error {
+	// Normalize remote path
+	remotePath = strings.TrimPrefix(remotePath, "/")
+	remotePath = strings.TrimPrefix(remotePath, "\\")
+	remotePath = strings.ReplaceAll(remotePath, "\\", "/")
+
+	if remotePath == "" || remotePath == "." {
+		return fmt.Errorf("invalid remote path: cannot delete root directory")
+	}
+
+	// Build the del command
+	cmd := fmt.Sprintf(`del "%s"`, remotePath)
+
+	args, err := buildSmbClientArgs(cfg, cmd)
+	if err != nil {
+		return err
+	}
+
+	output, err := smbClientExec.Execute(args)
+	if err != nil {
+		// Parse error messages
+		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||
+			strings.Contains(output, "NT_STATUS_OBJECT_PATH_NOT_FOUND") {
+			return fmt.Errorf("file not found: %s", remotePath)
+		}
+		if strings.Contains(output, "NT_STATUS_ACCESS_DENIED") {
+			return fmt.Errorf("access denied: cannot delete %s", remotePath)
+		}
+		if strings.Contains(output, "NT_STATUS_FILE_IS_A_DIRECTORY") {
+			return fmt.Errorf("cannot delete directory: %s (use rmdir for directories)", remotePath)
+		}
+		return fmt.Errorf("failed to delete file: %w", err)
+	}
+
+	return nil
+}

@@ -229,6 +229,42 @@ Upload a file to the SMB share.
 }
 ```
 
+### DELETE /delete
+
+Delete a file from the SMB share.
+
+**Query Parameters**:
+- `path`: Path to the file within the SMB share (required)
+
+**Response (200 OK)**:
+```json
+{
+  "status": "ok",
+  "path": "folder/file.txt"
+}
+```
+
+**Response (400 Bad Request)** - invalid path or attempting to delete directory:
+```json
+{
+  "detail": "invalid remote path: cannot delete root directory"
+}
+```
+
+**Response (403 Forbidden)** - access denied:
+```json
+{
+  "detail": "access denied: cannot delete folder/file.txt"
+}
+```
+
+**Response (404 Not Found)** - file not found:
+```json
+{
+  "detail": "file not found: folder/file.txt"
+}
+```
+
 **Response (500 Internal Server Error)**:
 ```json
 {
@@ -259,6 +295,16 @@ curl -X POST http://localhost:8080/upload \
   -F file=@document.pdf \
   -F remote_path=inbox/report.pdf \
   -F overwrite=true
+```
+
+### Delete a file
+```bash
+curl -X DELETE "http://localhost:8080/delete?path=inbox/report.pdf"
+```
+
+### Delete a file with special characters
+```bash
+curl -X DELETE "http://localhost:8080/delete?path=folder/my%20file.txt"
 ```
 
 ### Check service health
