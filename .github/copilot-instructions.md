@@ -47,6 +47,30 @@ go test ./...
 make test
 ```
 
+**IMPORTANT: Checking Test Results Properly**
+
+Task systems may report "succeeded" even when tests fail. ALWAYS verify the actual exit code and check both stdout and stderr:
+
+```bash
+# Write output to a file in the workspace so you can read it
+go test ./... > test_output.log 2>&1
+echo "Exit code: $?" >> test_output.log
+cat test_output.log
+```
+
+Then READ the test_output.log file to see:
+- The actual test results (PASS/FAIL for each test)
+- The exit code (0 = success, 1 = failure)
+- Any error messages or panics in stderr
+
+**Common test failure indicators:**
+- Exit code: 1 (even if task reports "succeeded")
+- Lines starting with "FAIL" or "--- FAIL:"
+- Panic messages in the output
+- "goroutine" stack traces
+
+Never assume tests passed based only on task status. Always verify by reading the actual test output and checking the exit code.
+
 **3. Full functional validation (30 seconds)**:
 Start the server with test environment variables (see "Running the Application" above), then:
 ```bash
@@ -218,6 +242,43 @@ curl -X POST http://localhost:8080/upload \
 - `github.com/hirochachacha/go-smb2` - SMB2/3 client library
 
 ## Troubleshooting
+
+### Test Failures and Debugging
+
+**CRITICAL: Task output can be misleading**
+
+When running tests through task systems, they may report "succeeded" even when tests fail with exit code 1. Always:
+
+1. **Capture output to a file in the workspace**:
+   ```bash
+   go test ./... > test_output.log 2>&1
+   echo "Exit code: $?" >> test_output.log
+   ```
+
+2. **Read the actual output file**:
+   ```bash
+   cat test_output.log
+   # or use read_file tool
+   ```
+
+3. **Look for these failure indicators**:
+   - `FAIL` in the output
+   - `--- FAIL: TestName`
+   - `panic:` messages
+   - Stack traces with `goroutine`
+   - Exit code: 1 (at end of log file)
+
+4. **Run specific failing tests with verbose output**:
+   ```bash
+   go test -v ./internal/smb/... -run TestListFiles > specific_test.log 2>&1
+   ```
+
+5. **Common test issues**:
+   - URL encoding: Query parameters with spaces need URL encoding or should be avoided in tests
+   - Mock setup: Ensure mocks use the correct struct fields (e.g., `ExecuteFunc`, not `MockOutput`)
+   - Test isolation: Each test should save/restore global state (e.g., `smbClientExec`)
+
+**Never rely solely on task status - always verify exit codes and read actual output.**
 
 ### "Connection refused" during upload testing
 - This is expected when using test SMB server values (127.0.0.1)

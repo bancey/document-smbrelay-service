@@ -2,6 +2,7 @@ package smb
 
 import (
 	"os"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -716,5 +717,318 @@ func TestUploadFile_ConnectionErrorMessage(t *testing.T) {
 			!strings.Contains(errMsg, "failed") && !strings.Contains(errMsg, "SMB") {
 			t.Logf("Error message: %s", errMsg)
 		}
+	}
+}
+
+func TestListFiles_Success(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Setup mock with custom output
+	mockExec := &MockSmbClientExecutor{
+		ExecuteFunc: func(args []string) (string, error) {
+			output := `  .                                   D        0  Mon Jan  1 00:00:00 2024
+  ..                                  D        0  Mon Jan  1 00:00:00 2024
+  document.pdf                        A     1024  Mon Jan  1 12:34:56 2024
+  folder1                             D        0  Mon Jan  1 10:00:00 2024
+  report.docx                         A     2048  Mon Jan  1 14:22:33 2024
+
+		65535 blocks of size 1024. 32768 blocks available`
+			return output, nil
+		},
+	}
+	smbClientExec = mockExec
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	files, err := ListFiles("", cfg)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(files) != 3 {
+		t.Errorf("Expected 3 files, got %d", len(files))
+	}
+
+	// Check first file
+	if files[0].Name != "document.pdf" {
+		t.Errorf("Expected first file name to be 'document.pdf', got '%s'", files[0].Name)
+	}
+	if files[0].IsDir {
+		t.Error("Expected first file to not be a directory")
+	}
+	if files[0].Size != 1024 {
+		t.Errorf("Expected first file size to be 1024, got %d", files[0].Size)
+	}
+
+	// Check directory
+	if files[1].Name != "folder1" {
+		t.Errorf("Expected second file name to be 'folder1', got '%s'", files[1].Name)
+	}
+	if !files[1].IsDir {
+		t.Error("Expected second file to be a directory")
+	}
+
+	// Verify the command that was executed
+	if len(mockExec.LastArgs) == 0 {
+		t.Fatal("Expected command to be executed")
+	}
+	// Should contain the ls command
+	foundCmd := false
+	for _, arg := range mockExec.LastArgs {
+		if arg == "ls" {
+			foundCmd = true
+			break
+		}
+	}
+	if !foundCmd {
+		t.Error("Expected 'ls' command to be executed")
+	}
+}
+
+func TestListFiles_WithPath(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Setup mock
+	mockExec := &MockSmbClientExecutor{
+		ExecuteFunc: func(args []string) (string, error) {
+			output := `  file1.txt                           A      512  Mon Jan  1 12:00:00 2024
+  file2.txt                           A      256  Mon Jan  1 13:00:00 2024
+
+		65535 blocks of size 1024. 32768 blocks available`
+			return output, nil
+		},
+	}
+	smbClientExec = mockExec
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	files, err := ListFiles("subfolder", cfg)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if len(files) != 2 {
+		t.Errorf("Expected 2 files, got %d", len(files))
+	}
+
+	// Verify the command includes cd
+	if len(mockExec.LastArgs) == 0 {
+		t.Fatal("Expected command to be executed")
+	}
+	foundCd := false
+	for _, arg := range mockExec.LastArgs {
+		if arg == `cd "subfolder"; ls` {
+			foundCd = true
+			break
+		}
+	}
+	if !foundCd {
+		t.Error("Expected 'cd' command to be executed")
+	}
+}
+
+func TestListFiles_PathNotFound(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Setup mock
+	mockExec := &MockSmbClientExecutor{
+		ExecuteFunc: func(args []string) (string, error) {
+			return "NT_STATUS_OBJECT_NAME_NOT_FOUND", fmt.Errorf("smbclient command failed")
+		},
+	}
+	smbClientExec = mockExec
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	_, err := ListFiles("nonexistent", cfg)
+	if err == nil {
+		t.Fatal("Expected error for non-existent path")
+	}
+
+	if err.Error() != "path not found: nonexistent" {
+		t.Errorf("Expected 'path not found' error, got: %v", err)
+	}
+}
+
+func TestListFiles_AccessDenied(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Setup mock
+	mockExec := &MockSmbClientExecutor{
+		ExecuteFunc: func(args []string) (string, error) {
+			return "NT_STATUS_ACCESS_DENIED", fmt.Errorf("smbclient command failed")
+		},
+	}
+	smbClientExec = mockExec
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	_, err := ListFiles("protected", cfg)
+	if err == nil {
+		t.Fatal("Expected error for access denied")
+	}
+
+	if err.Error() != "access denied to path: protected" {
+		t.Errorf("Expected 'access denied' error, got: %v", err)
+	}
+}
+
+func TestParseLsOutput(t *testing.T) {
+	tests := []struct {
+		name     string
+		output   string
+		expected int
+	}{
+		{
+			name: "Standard output with files and folders",
+			output: `  .                                   D        0  Mon Jan  1 00:00:00 2024
+  ..                                  D        0  Mon Jan  1 00:00:00 2024
+  file1.txt                           A      512  Mon Jan  1 12:00:00 2024
+  folder1                             D        0  Mon Jan  1 10:00:00 2024
+  file2.pdf                           A     1024  Mon Jan  1 14:00:00 2024
+
+		65535 blocks of size 1024. 32768 blocks available`,
+			expected: 3, // . and .. should be filtered out
+		},
+		{
+			name: "Empty directory",
+			output: `  .                                   D        0  Mon Jan  1 00:00:00 2024
+  ..                                  D        0  Mon Jan  1 00:00:00 2024
+
+		65535 blocks of size 1024. 32768 blocks available`,
+			expected: 0,
+		},
+		{
+			name:     "Invalid output",
+			output:   "Some error message",
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files := parseLsOutput(tt.output)
+			if len(files) != tt.expected {
+				t.Errorf("Expected %d files, got %d", tt.expected, len(files))
+			}
+		})
+	}
+}
+
+func TestListFiles_NormalizePath(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	tests := []struct {
+		name       string
+		inputPath  string
+		expectPath string
+	}{
+		{
+			name:       "Forward slash prefix",
+			inputPath:  "/folder",
+			expectPath: "folder",
+		},
+		{
+			name:       "Backslash prefix",
+			inputPath:  "\\folder",
+			expectPath: "folder",
+		},
+		{
+			name:       "Mixed slashes",
+			inputPath:  "folder\\subfolder",
+			expectPath: "folder/subfolder",
+		},
+		{
+			name:       "No prefix",
+			inputPath:  "folder",
+			expectPath: "folder",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockExec := &MockSmbClientExecutor{
+				ExecuteFunc: func(args []string) (string, error) {
+					return "", nil
+				},
+			}
+			smbClientExec = mockExec
+
+			cfg := &config.SMBConfig{
+				ServerName:   "testserver",
+				ServerIP:     "192.168.1.100",
+				ShareName:    "testshare",
+				Username:     "testuser",
+				Password:     "testpass",
+				Port:         445,
+				AuthProtocol: "ntlm",
+			}
+
+			_, _ = ListFiles(tt.inputPath, cfg)
+
+			// Check that the path was normalized in the command
+			if len(mockExec.LastArgs) == 0 {
+				t.Fatal("Expected command to be executed")
+			}
+			// The normalized path should be in the command
+			foundCmd := false
+			for _, arg := range mockExec.LastArgs {
+				if tt.expectPath != "" && tt.expectPath != "." {
+					expectedCmd := fmt.Sprintf(`cd "%s"; ls`, tt.expectPath)
+					if arg == expectedCmd {
+						foundCmd = true
+						break
+					}
+				} else if arg == "ls" {
+					foundCmd = true
+					break
+				}
+			}
+			if !foundCmd {
+				t.Errorf("Expected normalized path in command, got args: %v", mockExec.LastArgs)
+			}
+		})
 	}
 }

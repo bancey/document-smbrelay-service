@@ -39,6 +39,45 @@ func HealthHandler(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusServiceUnavailable).JSON(result)
 }
 
+// ListHandler handles GET /list requests
+func ListHandler(c *fiber.Ctx) error {
+	// Load configuration
+	cfg, missing := config.LoadFromEnv()
+	if len(missing) > 0 {
+		missingVars := strings.Join(missing, ", ")
+		errorMsg := fmt.Sprintf("Missing SMB configuration environment variables: %s", missingVars)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"detail": errorMsg,
+		})
+	}
+
+	// Get path from query parameter (default to root)
+	path := c.Query("path", "")
+
+	// List files
+	files, err := smb.ListFiles(path, cfg)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"detail": err.Error(),
+			})
+		}
+		if strings.Contains(err.Error(), "access denied") {
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"detail": err.Error(),
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"detail": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"path":  path,
+		"files": files,
+	})
+}
+
 // UploadHandler handles POST /upload requests
 func UploadHandler(c *fiber.Ctx) error {
 	// Load configuration
@@ -126,6 +165,70 @@ func GetOpenAPISpec(c *fiber.Ctx) error {
 						},
 						"503": map[string]interface{}{
 							"description": "Application is unhealthy or SMB server is inaccessible",
+						},
+					},
+				},
+			},
+			"/list": map[string]interface{}{
+				"get": map[string]interface{}{
+					"summary":     "List files and folders",
+					"description": "Lists files and folders at a given path on the SMB share",
+					"parameters": []map[string]interface{}{
+						{
+							"name":        "path",
+							"in":          "query",
+							"description": "Path within the SMB share (defaults to root)",
+							"required":    false,
+							"schema": map[string]interface{}{
+								"type":    "string",
+								"default": "",
+							},
+						},
+					},
+					"responses": map[string]interface{}{
+						"200": map[string]interface{}{
+							"description": "List of files and folders",
+							"content": map[string]interface{}{
+								"application/json": map[string]interface{}{
+									"schema": map[string]interface{}{
+										"type": "object",
+										"properties": map[string]interface{}{
+											"path": map[string]interface{}{
+												"type": "string",
+											},
+											"files": map[string]interface{}{
+												"type": "array",
+												"items": map[string]interface{}{
+													"type": "object",
+													"properties": map[string]interface{}{
+														"name": map[string]interface{}{
+															"type": "string",
+														},
+														"size": map[string]interface{}{
+															"type": "integer",
+														},
+														"is_dir": map[string]interface{}{
+															"type": "boolean",
+														},
+														"timestamp": map[string]interface{}{
+															"type": "string",
+														},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						"404": map[string]interface{}{
+							"description": "Path not found",
+						},
+						"403": map[string]interface{}{
+							"description": "Access denied",
+						},
+						"500": map[string]interface{}{
+							"description": "Server error",
 						},
 					},
 				},
