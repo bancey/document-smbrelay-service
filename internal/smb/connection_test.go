@@ -33,7 +33,7 @@ func TestCheckHealth_MissingConfig(t *testing.T) {
 		t.Errorf("Expected app_status to be 'ok', got '%s'", result.AppStatus)
 	}
 
-	if result.Status != "unhealthy" {
+	if result.Status != statusUnhealthy {
 		t.Errorf("Expected status to be 'unhealthy', got '%s'", result.Status)
 	}
 
@@ -74,7 +74,7 @@ func TestCheckHealth_InvalidServer(t *testing.T) {
 		t.Errorf("Expected app_status to be 'ok', got '%s'", result.AppStatus)
 	}
 
-	if result.Status != "unhealthy" {
+	if result.Status != statusUnhealthy {
 		t.Errorf("Expected status to be 'unhealthy', got '%s'", result.Status)
 	}
 
@@ -152,7 +152,7 @@ func TestCheckHealth_ConnectionRefused(t *testing.T) {
 
 	result := CheckHealth(cfg)
 
-	if result.Status != "unhealthy" {
+	if result.Status != statusUnhealthy {
 		t.Errorf("Expected status 'unhealthy', got '%s'", result.Status)
 	}
 
@@ -183,7 +183,7 @@ func TestCheckHealth_EmptyCredentials(t *testing.T) {
 	result := CheckHealth(cfg)
 
 	// Should fail due to missing credentials
-	if result.Status != "unhealthy" {
+	if result.Status != statusUnhealthy {
 		t.Errorf("Expected status 'unhealthy', got '%s'", result.Status)
 	}
 
@@ -244,7 +244,7 @@ func TestCheckHealth_CustomPort(t *testing.T) {
 	result := CheckHealth(cfg)
 
 	// Should fail because server doesn't exist
-	if result.Status != "unhealthy" {
+	if result.Status != statusUnhealthy {
 		t.Errorf("Expected status 'unhealthy', got '%s'", result.Status)
 	}
 
@@ -319,7 +319,7 @@ func TestCheckHealth_VariousPorts(t *testing.T) {
 
 		result := CheckHealth(cfg)
 
-		if result.Status != "unhealthy" {
+		if result.Status != statusUnhealthy {
 			t.Errorf("Port %d: Expected status 'unhealthy', got '%s'", port, result.Status)
 		}
 
@@ -350,7 +350,7 @@ func TestCheckHealth_IPv6Address(t *testing.T) {
 
 	result := CheckHealth(cfg)
 
-	if result.Status != "unhealthy" {
+	if result.Status != statusUnhealthy {
 		t.Errorf("Expected status 'unhealthy', got '%s'", result.Status)
 	}
 }
@@ -377,7 +377,7 @@ func TestCheckHealth_WithDomain(t *testing.T) {
 
 	result := CheckHealth(cfg)
 
-	if result.Status != "unhealthy" {
+	if result.Status != statusUnhealthy {
 		t.Errorf("Expected status 'unhealthy', got '%s'", result.Status)
 	}
 }
@@ -403,7 +403,7 @@ func TestCheckHealth_EmptyShareName(t *testing.T) {
 
 	result := CheckHealth(cfg)
 
-	if result.Status != "unhealthy" {
+	if result.Status != statusUnhealthy {
 		t.Errorf("Expected status 'unhealthy', got '%s'", result.Status)
 	}
 }
@@ -444,7 +444,7 @@ func TestCheckHealth_Credentials(t *testing.T) {
 			result := CheckHealth(cfg)
 
 			// All should be unhealthy due to connection failure or missing creds
-			if result.Status != "unhealthy" {
+			if result.Status != statusUnhealthy {
 				t.Errorf("Expected status 'unhealthy', got '%s'", result.Status)
 			}
 		})
@@ -503,7 +503,7 @@ func TestCheckHealth_HostnameOnly(t *testing.T) {
 
 	result := CheckHealth(cfg)
 
-	if result.Status != "unhealthy" {
+	if result.Status != statusUnhealthy {
 		t.Errorf("Expected status 'unhealthy', got '%s'", result.Status)
 	}
 }
@@ -560,7 +560,7 @@ func TestCheckHealth_AuthProtocols(t *testing.T) {
 			result := CheckHealth(cfg)
 
 			// Should be unhealthy due to connection failure
-			if result.Status != "unhealthy" {
+			if result.Status != statusUnhealthy {
 				t.Errorf("Protocol %s: Expected status 'unhealthy', got '%s'", protocol, result.Status)
 			}
 		})

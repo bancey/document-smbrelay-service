@@ -46,7 +46,10 @@ func SetupSuccessfulMock() *MockSmbClientExecutor {
 					if strings.HasPrefix(cmd, "ls") {
 						// If it's just "ls" (health check), return directory listing
 						if cmd == "ls" || cmd == "ls " || strings.TrimSpace(cmd) == "ls" {
-							return "  .                                   D        0  Mon Jan  1 00:00:00 2024\n  ..                                  D        0  Mon Jan  1 00:00:00 2024\n\n\t\t64256 blocks of size 1024. 32128 blocks available\n", nil
+							dirListing := "  .                                   D        0  Mon Jan  1 00:00:00 2024\n" +
+								"  ..                                  D        0  Mon Jan  1 00:00:00 2024\n\n" +
+								"\t\t64256 blocks of size 1024. 32128 blocks available\n"
+							return dirListing, nil
 						}
 						// If it's "ls filename" (file existence check), return file not found
 						return "NT_STATUS_NO_SUCH_FILE", fmt.Errorf("smbclient command failed: exit status 1")
@@ -73,10 +76,11 @@ func SetupSuccessfulMock() *MockSmbClientExecutor {
 // SetupFailureMock configures the mock to simulate failed operations
 func SetupFailureMock(errorType string) *MockSmbClientExecutor {
 	mock := &MockSmbClientExecutor{
-		ExecuteFunc: func(args []string) (string, error) {
+		ExecuteFunc: func(_ []string) (string, error) {
 			switch errorType {
 			case "connection_refused":
-				return "Connection to 127.0.0.1 failed (Error NT_STATUS_CONNECTION_REFUSED)", fmt.Errorf("smbclient command failed: exit status 1")
+				errMsg := "Connection to 127.0.0.1 failed (Error NT_STATUS_CONNECTION_REFUSED)"
+				return errMsg, fmt.Errorf("smbclient command failed: exit status 1")
 			case "auth_failure":
 				return "session setup failed: NT_STATUS_LOGON_FAILURE", fmt.Errorf("smbclient command failed: exit status 1")
 			case "share_not_found":

@@ -1,3 +1,4 @@
+// Package logger provides logging utilities with configurable log levels.
 package logger
 
 import (
@@ -6,13 +7,19 @@ import (
 	"strings"
 )
 
-var (
-	// Log levels
+// Log level constants
+const (
+	// DEBUG level logs detailed debugging information
 	DEBUG = 0
-	INFO  = 1
-	WARN  = 2
+	// INFO level logs informational messages
+	INFO = 1
+	// WARN level logs warning messages
+	WARN = 2
+	// ERROR level logs error messages
 	ERROR = 3
+)
 
+var (
 	currentLevel = INFO
 )
 

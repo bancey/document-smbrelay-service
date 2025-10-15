@@ -1,3 +1,4 @@
+// Package testutil provides utility functions for testing.
 package testutil
 
 import (
@@ -5,31 +6,22 @@ import (
 	"testing"
 )
 
-// SetupTestEnv sets up a clean test environment with SMB configuration
-func SetupTestEnv(t *testing.T) func() {
-	// Save original environment
+// SetupTestEnv sets up environment variables for testing
+func SetupTestEnv(_ *testing.T) func() {
 	originalEnv := os.Environ()
 
-	// Clear environment
-	os.Clearenv()
+	_ = os.Setenv("SMB_SERVER_NAME", "testserver") // nolint:errcheck
+	_ = os.Setenv("SMB_SERVER_IP", "127.0.0.1")    // nolint:errcheck
+	_ = os.Setenv("SMB_SHARE_NAME", "testshare")   // nolint:errcheck
+	_ = os.Setenv("SMB_USERNAME", "testuser")      // nolint:errcheck
+	_ = os.Setenv("SMB_PASSWORD", "testpass")      // nolint:errcheck
 
-	// Set test SMB configuration
-	os.Setenv("SMB_SERVER_NAME", "testserver")
-	os.Setenv("SMB_SERVER_IP", "127.0.0.1")
-	os.Setenv("SMB_SHARE_NAME", "testshare")
-	os.Setenv("SMB_USERNAME", "testuser")
-	os.Setenv("SMB_PASSWORD", "testpass")
-	os.Setenv("SMB_PORT", "445")
-	os.Setenv("LOG_LEVEL", "ERROR") // Reduce noise during tests
-
-	// Return cleanup function
 	return func() {
 		os.Clearenv()
 		for _, env := range originalEnv {
-			// Parse KEY=VALUE
 			for i := 0; i < len(env); i++ {
 				if env[i] == '=' {
-					os.Setenv(env[:i], env[i+1:])
+					_ = os.Setenv(env[:i], env[i+1:]) // nolint:errcheck
 					break
 				}
 			}
@@ -38,7 +30,7 @@ func SetupTestEnv(t *testing.T) func() {
 }
 
 // SetupEmptyEnv clears all environment variables for testing missing config
-func SetupEmptyEnv(t *testing.T) func() {
+func SetupEmptyEnv(_ *testing.T) func() {
 	originalEnv := os.Environ()
 
 	os.Clearenv()
@@ -48,7 +40,7 @@ func SetupEmptyEnv(t *testing.T) func() {
 		for _, env := range originalEnv {
 			for i := 0; i < len(env); i++ {
 				if env[i] == '=' {
-					os.Setenv(env[:i], env[i+1:])
+					_ = os.Setenv(env[:i], env[i+1:]) // nolint:errcheck
 					break
 				}
 			}

@@ -11,9 +11,9 @@ import (
 	"github.com/bancey/document-smbrelay-service/internal/config"
 )
 
-// SmbClientExecutor defines the interface for executing smbclient commands
+// ClientExecutor defines the interface for executing smbclient commands
 // This allows for easy mocking in tests
-type SmbClientExecutor interface {
+type ClientExecutor interface {
 	Execute(args []string) (string, error)
 }
 
@@ -41,7 +41,7 @@ func (e *DefaultSmbClientExecutor) Execute(args []string) (string, error) {
 }
 
 // Global executor that can be replaced in tests
-var smbClientExec SmbClientExecutor = &DefaultSmbClientExecutor{}
+var smbClientExec ClientExecutor = &DefaultSmbClientExecutor{}
 
 // buildSmbClientArgs constructs the arguments for smbclient command
 func buildSmbClientArgs(cfg *config.SMBConfig, command string) ([]string, error) {
@@ -152,8 +152,8 @@ func uploadFileViaSmbClient(localPath string, remotePath string, cfg *config.SMB
 		if err != nil {
 			return err
 		}
-		// Ignore errors - directory might already exist
-		_, _ = smbClientExec.Execute(args)
+		// Try to create the parent directory, ignoring errors as it might already exist
+		_, _ = smbClientExec.Execute(args) // nolint:errcheck
 	}
 
 	// Build the put command

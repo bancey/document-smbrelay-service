@@ -1,3 +1,4 @@
+// Package handlers provides HTTP request handlers for the SMB relay service.
 package handlers
 
 import (
@@ -6,9 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/bancey/document-smbrelay-service/internal/config"
-	"github.com/bancey/document-smbrelay-service/internal/smb"
 	"github.com/gofiber/fiber/v2"
+
+	"github.com/bancey/document-smbrelay-service/internal/config"
+	"github.com/bancey/document-smbrelay-service/internal/logger"
+	"github.com/bancey/document-smbrelay-service/internal/smb"
 )
 
 // HealthHandler handles GET /health requests
@@ -16,12 +19,14 @@ func HealthHandler(c *fiber.Ctx) error {
 	cfg, missing := config.LoadFromEnv()
 
 	if len(missing) > 0 {
+		missingVars := strings.Join(missing, ", ")
+		errorMsg := fmt.Sprintf("Missing SMB configuration environment variables: %s", missingVars)
 		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
 			"status":               "unhealthy",
 			"app_status":           "ok",
 			"smb_connection":       "not_configured",
 			"smb_share_accessible": false,
-			"error":                fmt.Sprintf("Missing SMB configuration environment variables: %s", strings.Join(missing, ", ")),
+			"error":                errorMsg,
 		})
 	}
 
@@ -39,8 +44,10 @@ func UploadHandler(c *fiber.Ctx) error {
 	// Load configuration
 	cfg, missing := config.LoadFromEnv()
 	if len(missing) > 0 {
+		missingVars := strings.Join(missing, ", ")
+		errorMsg := fmt.Sprintf("Missing SMB configuration environment variables: %s", missingVars)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"detail": fmt.Sprintf("Missing SMB configuration environment variables: %s", strings.Join(missing, ", ")),
+			"detail": errorMsg,
 		})
 	}
 
@@ -63,17 +70,21 @@ func UploadHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	// Save uploaded file to temporary location
+	// Save uploaded file to temp location
 	tmpDir := os.TempDir()
 	tmpPath := filepath.Join(tmpDir, fmt.Sprintf("smb-upload-%s", filepath.Base(file.Filename)))
 
 	err = c.SaveFile(file, tmpPath)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"detail": fmt.Sprintf("failed to save uploaded file: %v", err),
+			"detail": fmt.Sprintf("Failed to save uploaded file: %v", err),
 		})
 	}
-	defer os.Remove(tmpPath)
+	defer func() {
+		if removeErr := os.Remove(tmpPath); removeErr != nil {
+			logger.Error("Failed to remove temp file %s: %v", tmpPath, removeErr)
+		}
+	}()
 
 	// Upload to SMB share
 	err = smb.UploadFile(tmpPath, remotePath, cfg, overwrite)

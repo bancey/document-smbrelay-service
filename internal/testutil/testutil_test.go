@@ -37,7 +37,7 @@ func TestSetupEmptyEnv(t *testing.T) {
 	}
 }
 
-func TestAssertContains(t *testing.T) {
+func TestAssertContains(_ *testing.T) {
 	// Create a mock test to capture failures
 	mockT := &testing.T{}
 
@@ -47,7 +47,7 @@ func TestAssertContains(t *testing.T) {
 	// This should fail (but we can't easily test it without causing actual failure)
 }
 
-func TestAssertEqual(t *testing.T) {
+func TestAssertEqual(_ *testing.T) {
 	mockT := &testing.T{}
 
 	AssertEqual(mockT, 42, 42)
@@ -55,7 +55,7 @@ func TestAssertEqual(t *testing.T) {
 	AssertEqual(mockT, true, true)
 }
 
-func TestAssertNotEqual(t *testing.T) {
+func TestAssertNotEqual(_ *testing.T) {
 	mockT := &testing.T{}
 
 	AssertNotEqual(mockT, 42, 43)
@@ -63,26 +63,26 @@ func TestAssertNotEqual(t *testing.T) {
 	AssertNotEqual(mockT, true, false)
 }
 
-func TestAssertTrue(t *testing.T) {
+func TestAssertTrue(_ *testing.T) {
 	mockT := &testing.T{}
 
 	AssertTrue(mockT, true)
 }
 
-func TestAssertFalse(t *testing.T) {
+func TestAssertFalse(_ *testing.T) {
 	mockT := &testing.T{}
 
 	AssertFalse(mockT, false)
 }
 
-func TestAssertNil(t *testing.T) {
+func TestAssertNil(_ *testing.T) {
 	mockT := &testing.T{}
 
 	var nilValue interface{}
 	AssertNil(mockT, nilValue)
 }
 
-func TestAssertNotNil(t *testing.T) {
+func TestAssertNotNil(_ *testing.T) {
 	mockT := &testing.T{}
 
 	value := "not nil"

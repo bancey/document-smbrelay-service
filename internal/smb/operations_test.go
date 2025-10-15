@@ -220,7 +220,7 @@ func TestUploadFile_OverwriteFalse(t *testing.T) {
 	// Use mock that simulates file exists
 	callCount := 0
 	mock := &MockSmbClientExecutor{
-		ExecuteFunc: func(args []string) (string, error) {
+		ExecuteFunc: func(_ []string) (string, error) {
 			callCount++
 			// First call checks if file exists (ls command)
 			if callCount == 1 {

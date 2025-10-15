@@ -361,7 +361,7 @@ func TestUploadHandler_OverwriteParameter(t *testing.T) {
 // ============================================================================
 
 // Test that file exists error returns 409 Conflict
-func TestUploadHandler_FileExistsError(t *testing.T) {
+func TestUploadHandler_FileExistsError(_ *testing.T) {
 	// This tests the branch where error contains "already exists"
 	// While we can't easily trigger this without a real SMB server,
 	// we can verify the error handling logic is in place
@@ -613,7 +613,7 @@ func TestUploadHandler_RemotePathFormats(t *testing.T) {
 }
 
 // Test that temporary file is cleaned up even on error
-func TestUploadHandler_TempFileCleanup(t *testing.T) {
+func TestUploadHandler_TempFileCleanup(_ *testing.T) {
 	os.Clearenv()
 	os.Setenv("SMB_SERVER_NAME", "testserver")
 	os.Setenv("SMB_SERVER_IP", "127.0.0.1")

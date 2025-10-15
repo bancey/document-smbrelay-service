@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bancey/document-smbrelay-service/internal/handlers"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+
+	"github.com/bancey/document-smbrelay-service/internal/handlers"
 )
 
 // setupTestApp creates a Fiber app configured for testing

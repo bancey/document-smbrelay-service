@@ -1,24 +1,33 @@
+// Package smb provides SMB connectivity and file operations.
 package smb
 
 import (
 	"github.com/bancey/document-smbrelay-service/internal/config"
 )
 
+const (
+	statusHealthy   = "healthy"
+	statusUnhealthy = "unhealthy"
+	statusOK        = "ok"
+	statusFailed    = "failed"
+)
+
 // HealthCheckResult represents the result of an SMB health check
+// Fields are ordered for optimal memory alignment
 type HealthCheckResult struct {
 	Status             string `json:"status"`
 	AppStatus          string `json:"app_status"`
 	SMBConnection      string `json:"smb_connection"`
-	SMBShareAccessible bool   `json:"smb_share_accessible"`
 	Server             string `json:"server"`
 	Share              string `json:"share"`
 	Error              string `json:"error,omitempty"`
+	SMBShareAccessible bool   `json:"smb_share_accessible"`
 }
 
 // CheckHealth performs a health check on the SMB server and share using smbclient
 func CheckHealth(cfg *config.SMBConfig) *HealthCheckResult {
 	result := &HealthCheckResult{
-		AppStatus: "ok",
+		AppStatus: statusOK,
 		Server:    cfg.GetServerDisplay(),
 		Share:     cfg.ShareName,
 	}
@@ -26,15 +35,15 @@ func CheckHealth(cfg *config.SMBConfig) *HealthCheckResult {
 	// Test connection using smbclient
 	err := testConnection(cfg)
 	if err != nil {
-		result.Status = "unhealthy"
-		result.SMBConnection = "failed"
+		result.Status = statusUnhealthy
+		result.SMBConnection = statusFailed
 		result.SMBShareAccessible = false
 		result.Error = err.Error()
 		return result
 	}
 
-	result.Status = "healthy"
-	result.SMBConnection = "ok"
+	result.Status = statusHealthy
+	result.SMBConnection = statusOK
 	result.SMBShareAccessible = true
 	return result
 }

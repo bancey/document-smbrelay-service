@@ -1,3 +1,4 @@
+// Package config handles SMB configuration management
 package config
 
 import (
@@ -8,6 +9,7 @@ import (
 )
 
 // SMBConfig holds the SMB server configuration
+// Fields are ordered for optimal memory alignment
 type SMBConfig struct {
 	ServerName   string
 	ServerIP     string
@@ -15,9 +17,9 @@ type SMBConfig struct {
 	Username     string
 	Password     string
 	Domain       string
+	AuthProtocol string
 	Port         int
 	UseNTLMv2    bool
-	AuthProtocol string
 }
 
 // LoadFromEnv loads SMB configuration from environment variables

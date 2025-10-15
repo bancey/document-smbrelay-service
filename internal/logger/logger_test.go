@@ -8,17 +8,25 @@ import (
 	"testing"
 )
 
+const (
+	testLogLevelDEBUG   = "DEBUG"
+	testLogLevelINFO    = "INFO"
+	testLogLevelWARN    = "WARN"
+	testLogLevelWARNING = "WARNING"
+	testLogLevelERROR   = "ERROR"
+)
+
 func TestLogLevelInitialization(t *testing.T) {
 	tests := []struct {
 		name          string
 		envValue      string
 		expectedLevel int
 	}{
-		{"Debug level", "DEBUG", DEBUG},
-		{"Info level", "INFO", INFO},
-		{"Warning level", "WARNING", WARN},
-		{"Warn level", "WARN", WARN},
-		{"Error level", "ERROR", ERROR},
+		{"Debug level", testLogLevelDEBUG, DEBUG},
+		{"Info level", testLogLevelINFO, INFO},
+		{"Warning level", testLogLevelWARNING, WARN},
+		{"Warn level", testLogLevelWARN, WARN},
+		{"Error level", testLogLevelERROR, ERROR},
 		{"Empty defaults to INFO", "", INFO},
 		{"Invalid defaults to INFO", "INVALID", INFO},
 	}
@@ -38,18 +46,18 @@ func TestLogLevelInitialization(t *testing.T) {
 			// Re-initialize
 			logLevel := strings.ToUpper(os.Getenv("LOG_LEVEL"))
 			if logLevel == "" {
-				logLevel = "INFO"
+				logLevel = testLogLevelINFO
 			}
 
 			var level int
 			switch logLevel {
-			case "DEBUG":
+			case testLogLevelDEBUG:
 				level = DEBUG
-			case "INFO":
+			case testLogLevelINFO:
 				level = INFO
-			case "WARNING", "WARN":
+			case testLogLevelWARNING, testLogLevelWARN:
 				level = WARN
-			case "ERROR":
+			case testLogLevelERROR:
 				level = ERROR
 			default:
 				level = INFO
@@ -253,17 +261,17 @@ func TestLogLevel_AllVariations(t *testing.T) {
 			// Set the level based on env value
 			logLevel := strings.ToUpper(tt.envValue)
 			if logLevel == "" {
-				logLevel = "INFO"
+				logLevel = testLogLevelINFO
 			}
 
 			switch logLevel {
-			case "DEBUG":
+			case testLogLevelDEBUG:
 				currentLevel = DEBUG
-			case "INFO":
+			case testLogLevelINFO:
 				currentLevel = INFO
-			case "WARNING", "WARN":
+			case testLogLevelWARNING, testLogLevelWARN:
 				currentLevel = WARN
-			case "ERROR":
+			case testLogLevelERROR:
 				currentLevel = ERROR
 			default:
 				currentLevel = INFO
@@ -405,10 +413,9 @@ func TestInit_DefaultLevel(t *testing.T) {
 	// When LOG_LEVEL is not set, it should default to INFO
 	logLevel := strings.ToUpper(os.Getenv("LOG_LEVEL"))
 	if logLevel == "" {
-		logLevel = "INFO"
+		logLevel = testLogLevelINFO
 	}
-
-	if logLevel != "INFO" {
+	if logLevel != testLogLevelINFO {
 		t.Errorf("Expected default log level INFO, got %s", logLevel)
 	}
 }
@@ -440,13 +447,13 @@ func TestLogLevel_CaseInsensitive(t *testing.T) {
 
 			var level int
 			switch upperInput {
-			case "DEBUG":
+			case testLogLevelDEBUG:
 				level = DEBUG
-			case "INFO":
+			case testLogLevelINFO:
 				level = INFO
-			case "WARNING", "WARN":
+			case testLogLevelWARNING, testLogLevelWARN:
 				level = WARN
-			case "ERROR":
+			case testLogLevelERROR:
 				level = ERROR
 			default:
 				level = INFO

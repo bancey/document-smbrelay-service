@@ -23,9 +23,10 @@ func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, over
 			return err
 		}
 
-		output, _ := smbClientExec.Execute(args)
+		output, err := smbClientExec.Execute(args)
 		// If the file is found in the output, it exists
-		if strings.Contains(output, remotePath) || strings.Contains(output, "blocks of size") {
+		// Note: We ignore the error here as the command may fail if file doesn't exist
+		if err == nil && (strings.Contains(output, remotePath) || strings.Contains(output, "blocks of size")) {
 			return fmt.Errorf("remote file already exists: %s", remotePath)
 		}
 	}

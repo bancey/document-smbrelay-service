@@ -5,6 +5,11 @@ import (
 	"testing"
 )
 
+const (
+	testAuthProtocolNTLM      = "ntlm"
+	testAuthProtocolNegotiate = "negotiate"
+)
+
 func TestLoadFromEnv(t *testing.T) {
 	// Test with missing required variables
 	t.Run("Missing required variables", func(t *testing.T) {
@@ -44,7 +49,7 @@ func TestLoadFromEnv(t *testing.T) {
 			t.Errorf("Expected Port 445, got %d", cfg.Port)
 		}
 
-		if cfg.AuthProtocol != "ntlm" {
+		if cfg.AuthProtocol != testAuthProtocolNTLM {
 			t.Errorf("Expected AuthProtocol 'ntlm', got '%s'", cfg.AuthProtocol)
 		}
 	})
@@ -150,7 +155,7 @@ func TestLoadFromEnv(t *testing.T) {
 
 		cfg, _ := LoadFromEnv()
 
-		if cfg.AuthProtocol != "negotiate" {
+		if cfg.AuthProtocol != testAuthProtocolNegotiate {
 			t.Errorf("Expected AuthProtocol 'negotiate', got '%s'", cfg.AuthProtocol)
 		}
 	})
@@ -167,7 +172,7 @@ func TestLoadFromEnv(t *testing.T) {
 
 		cfg, _ := LoadFromEnv()
 
-		if cfg.AuthProtocol != "ntlm" {
+		if cfg.AuthProtocol != testAuthProtocolNTLM {
 			t.Errorf("Expected AuthProtocol 'ntlm', got '%s'", cfg.AuthProtocol)
 		}
 	})
@@ -185,7 +190,7 @@ func TestLoadFromEnv(t *testing.T) {
 
 		cfg, _ := LoadFromEnv()
 
-		if cfg.AuthProtocol != "ntlm" {
+		if cfg.AuthProtocol != testAuthProtocolNTLM {
 			t.Errorf("Expected AuthProtocol to default to 'ntlm' when invalid, got '%s'", cfg.AuthProtocol)
 		}
 	})
@@ -202,7 +207,7 @@ func TestLoadFromEnv(t *testing.T) {
 
 		cfg, _ := LoadFromEnv()
 
-		if cfg.AuthProtocol != "ntlm" {
+		if cfg.AuthProtocol != testAuthProtocolNTLM {
 			t.Errorf("Expected AuthProtocol 'ntlm' from UseNTLMv2=true, got '%s'", cfg.AuthProtocol)
 		}
 	})
@@ -219,7 +224,7 @@ func TestLoadFromEnv(t *testing.T) {
 
 		cfg, _ := LoadFromEnv()
 
-		if cfg.AuthProtocol != "negotiate" {
+		if cfg.AuthProtocol != testAuthProtocolNegotiate {
 			t.Errorf("Expected AuthProtocol 'negotiate' from UseNTLMv2=false, got '%s'", cfg.AuthProtocol)
 		}
 	})
@@ -294,8 +299,8 @@ func TestGetServer_BothEmpty(t *testing.T) {
 // Test all combinations of missing variables
 func TestLoadFromEnv_PartiallyMissing(t *testing.T) {
 	tests := []struct {
-		name          string
 		envVars       map[string]string
+		name          string
 		expectedCount int
 	}{
 		{

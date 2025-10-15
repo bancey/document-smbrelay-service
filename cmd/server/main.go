@@ -1,3 +1,4 @@
+// Package main provides the entry point for the SMB relay service.
 package main
 
 import (
@@ -6,10 +7,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/bancey/document-smbrelay-service/internal/handlers"
-	"github.com/bancey/document-smbrelay-service/internal/logger"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+
+	"github.com/bancey/document-smbrelay-service/internal/handlers"
+	"github.com/bancey/document-smbrelay-service/internal/logger"
 )
 
 func main() {
@@ -48,7 +50,9 @@ func main() {
 	go func() {
 		<-c
 		logger.Info("Shutting down server...")
-		_ = app.Shutdown()
+		if err := app.Shutdown(); err != nil {
+			logger.Error("Error during shutdown: %v", err)
+		}
 	}()
 
 	// Start server
