@@ -18,11 +18,48 @@ type ClientExecutor interface {
 }
 
 // DefaultSmbClientExecutor uses the real smbclient binary
-type DefaultSmbClientExecutor struct{}
+type DefaultSmbClientExecutor struct {
+	BinaryPath string
+}
+
+// getSmbClientPath determines the path to the smbclient binary
+// It checks the SMBCLIENT_PATH environment variable first, then searches common locations
+func getSmbClientPath() string {
+	// Check environment variable first
+	if path := os.Getenv("SMBCLIENT_PATH"); path != "" {
+		return path
+	}
+
+	// Try to find smbclient in PATH
+	if path, err := exec.LookPath("smbclient"); err == nil {
+		return path
+	}
+
+	// Common locations as fallbacks
+	commonPaths := []string{
+		"/usr/bin/smbclient",
+		"/bin/smbclient",
+		"/usr/local/bin/smbclient",
+	}
+
+	for _, path := range commonPaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+
+	// Default fallback
+	return "/usr/bin/smbclient"
+}
 
 // Execute runs smbclient with the given arguments
 func (e *DefaultSmbClientExecutor) Execute(args []string) (string, error) {
-	cmd := exec.Command("/bin/smbclient", args...)
+	binaryPath := e.BinaryPath
+	if binaryPath == "" {
+		binaryPath = getSmbClientPath()
+	}
+
+	cmd := exec.Command(binaryPath, args...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

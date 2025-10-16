@@ -82,6 +82,7 @@ See [QUICKSTART.md](QUICKSTART.md) for more detailed getting started guide.
 - `SMB_AUTH_PROTOCOL`: Authentication protocol - `negotiate|ntlm|kerberos` (default: derived from `SMB_USE_NTLM_V2`)
 - `LOG_LEVEL`: Application log level - `DEBUG|INFO|WARNING|ERROR` (default: `INFO`)
 - `PORT`: HTTP server port (default: `8080`)
+- `SMBCLIENT_PATH`: Path to smbclient binary (default: auto-detected from PATH or common locations)
 
 ## Authentication Methods
 
