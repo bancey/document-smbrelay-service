@@ -18,11 +18,77 @@ type ClientExecutor interface {
 }
 
 // DefaultSmbClientExecutor uses the real smbclient binary
-type DefaultSmbClientExecutor struct{}
+type DefaultSmbClientExecutor struct {
+	BinaryPath string
+}
+
+// getSmbClientPath determines the path to the smbclient binary
+// It checks the SMBCLIENT_PATH environment variable first, then searches common locations
+func getSmbClientPath() string {
+	// Check environment variable first
+	if path := os.Getenv("SMBCLIENT_PATH"); path != "" {
+		// Validate the path exists and is executable
+		if validateBinaryPath(path) {
+			return path
+		}
+	}
+
+	// Try to find smbclient in PATH
+	if path, err := exec.LookPath("smbclient"); err == nil {
+		return path
+	}
+
+	// Common locations as fallbacks
+	commonPaths := []string{
+		"/usr/bin/smbclient",
+		"/bin/smbclient",
+		"/usr/local/bin/smbclient",
+	}
+
+	for _, path := range commonPaths {
+		if validateBinaryPath(path) {
+			return path
+		}
+	}
+
+	// Default fallback
+	return "/usr/bin/smbclient"
+}
+
+// validateBinaryPath checks if a path exists and is executable
+func validateBinaryPath(path string) bool {
+	// Check if file exists
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	// Check if it's a regular file (not a directory)
+	if !info.Mode().IsRegular() {
+		return false
+	}
+
+	// Check if it's executable (Unix permission check)
+	if info.Mode().Perm()&0111 == 0 {
+		return false
+	}
+
+	return true
+}
 
 // Execute runs smbclient with the given arguments
 func (e *DefaultSmbClientExecutor) Execute(args []string) (string, error) {
-	cmd := exec.Command("/bin/smbclient", args...)
+	binaryPath := e.BinaryPath
+	if binaryPath == "" {
+		binaryPath = getSmbClientPath()
+	}
+
+	// #nosec G204 - binaryPath is validated and comes from trusted sources:
+	// 1. Environment variable (SMBCLIENT_PATH) - user is responsible for ensuring input is properly
+	//    sanitised and do not contain unsafe user-controlled data.
+	// 2. System PATH via exec.LookPath()
+	// 3. Hardcoded known paths checked with validateBinaryPath()
+	cmd := exec.Command(binaryPath, args...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

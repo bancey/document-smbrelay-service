@@ -38,6 +38,9 @@ COPY --from=builder /app/server /app/server
 ENV PORT=8080
 ENV LOG_LEVEL=INFO
 
+# Set smbclient path - Alpine installs it to /usr/bin/smbclient
+ENV SMBCLIENT_PATH=/usr/bin/smbclient
+
 RUN adduser -D -u 1000 appuser && \
     chown -R appuser:appuser /app && \
     mkdir -p /tmp && \

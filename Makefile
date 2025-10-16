@@ -79,8 +79,8 @@ vet: ## Run go vet
 
 lint: ## Run golangci-lint (if installed)
 	@echo "Running golangci-lint..."
-	golangci-lint run || echo "golangci-lint not installed"
+	golangci-lint run
 
-check: fmt vet test ## Run format, vet, and tests
+check: fmt vet lint test ## Run format, vet, and tests
 
 ci: deps fmt vet test-coverage ## Run full CI pipeline locally

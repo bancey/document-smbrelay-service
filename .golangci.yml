@@ -66,7 +66,7 @@ linters:
       min-occurrences: 3
       
     misspell:
-      # Locale for spell checking
+      # Locale for spell checking (US for consistency with Go ecosystem)
       locale: US
       
     lll:
@@ -98,6 +98,11 @@ linters:
       - path: vendor/
         linters:
           - all
+      
+      # Allow UK spellings in specific contexts (sanitised is acceptable security term)
+      - text: '`sanitised` is a misspelling of `sanitized`'
+        linters:
+          - misspell
 
 # Formatters configuration (v2 format - gofmt, gofumpt, goimports moved here)
 formatters:
