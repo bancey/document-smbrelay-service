@@ -5,6 +5,33 @@ import (
 	"testing"
 )
 
+func TestValidateBinaryPath_ValidExecutable(t *testing.T) {
+	// Try to find a known executable on the system
+	if path, err := os.Executable(); err == nil {
+		if validateBinaryPath(path) {
+			t.Logf("Successfully validated executable: %s", path)
+		} else {
+			t.Errorf("Failed to validate known executable: %s", path)
+		}
+	}
+}
+
+func TestValidateBinaryPath_NonExistent(t *testing.T) {
+	result := validateBinaryPath("/nonexistent/path/to/binary")
+	if result {
+		t.Error("Expected validation to fail for non-existent path")
+	}
+}
+
+func TestValidateBinaryPath_Directory(t *testing.T) {
+	// Use a directory that should exist
+	tmpDir := os.TempDir()
+	result := validateBinaryPath(tmpDir)
+	if result {
+		t.Errorf("Expected validation to fail for directory: %s", tmpDir)
+	}
+}
+
 func TestGetSmbClientPath_EnvironmentVariable(t *testing.T) {
 	// Save original env and restore after test
 	origPath := os.Getenv("SMBCLIENT_PATH")
@@ -16,14 +43,23 @@ func TestGetSmbClientPath_EnvironmentVariable(t *testing.T) {
 		}
 	}()
 
-	// Test with custom path
-	customPath := "/custom/path/smbclient"
-	os.Setenv("SMBCLIENT_PATH", customPath)
+	// Test with a valid executable path
+	if testPath, err := os.Executable(); err == nil {
+		os.Setenv("SMBCLIENT_PATH", testPath)
+		result := getSmbClientPath()
 
+		if result != testPath {
+			t.Errorf("Expected path to be '%s', got '%s'", testPath, result)
+		}
+	}
+
+	// Test with invalid path - should fall back
+	os.Setenv("SMBCLIENT_PATH", "/invalid/nonexistent/path")
 	result := getSmbClientPath()
 
-	if result != customPath {
-		t.Errorf("Expected path to be '%s', got '%s'", customPath, result)
+	// Should not return the invalid path
+	if result == "/invalid/nonexistent/path" {
+		t.Error("Expected fallback for invalid SMBCLIENT_PATH")
 	}
 }
 

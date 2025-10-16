@@ -27,7 +27,10 @@ type DefaultSmbClientExecutor struct {
 func getSmbClientPath() string {
 	// Check environment variable first
 	if path := os.Getenv("SMBCLIENT_PATH"); path != "" {
-		return path
+		// Validate the path exists and is executable
+		if validateBinaryPath(path) {
+			return path
+		}
 	}
 
 	// Try to find smbclient in PATH
@@ -43,13 +46,34 @@ func getSmbClientPath() string {
 	}
 
 	for _, path := range commonPaths {
-		if _, err := os.Stat(path); err == nil {
+		if validateBinaryPath(path) {
 			return path
 		}
 	}
 
 	// Default fallback
 	return "/usr/bin/smbclient"
+}
+
+// validateBinaryPath checks if a path exists and is executable
+func validateBinaryPath(path string) bool {
+	// Check if file exists
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+
+	// Check if it's a regular file (not a directory)
+	if !info.Mode().IsRegular() {
+		return false
+	}
+
+	// Check if it's executable (Unix permission check)
+	if info.Mode().Perm()&0111 == 0 {
+		return false
+	}
+
+	return true
 }
 
 // Execute runs smbclient with the given arguments
@@ -59,6 +83,11 @@ func (e *DefaultSmbClientExecutor) Execute(args []string) (string, error) {
 		binaryPath = getSmbClientPath()
 	}
 
+	// #nosec G204 - binaryPath is validated and comes from trusted sources:
+	// 1. Validated environment variable (SMBCLIENT_PATH)
+	// 2. System PATH via exec.LookPath()
+	// 3. Hardcoded known paths checked with validateBinaryPath()
+	// args are constructed internally and not from direct user input
 	cmd := exec.Command(binaryPath, args...)
 
 	var stdout, stderr bytes.Buffer
