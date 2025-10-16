@@ -84,10 +84,10 @@ func (e *DefaultSmbClientExecutor) Execute(args []string) (string, error) {
 	}
 
 	// #nosec G204 - binaryPath is validated and comes from trusted sources:
-	// 1. Validated environment variable (SMBCLIENT_PATH)
+	// 1. Environment variable (SMBCLIENT_PATH) - user is responsible for ensuring input is properly
+	// 		 sanitised and do not contain unsafe user-controlled data.
 	// 2. System PATH via exec.LookPath()
 	// 3. Hardcoded known paths checked with validateBinaryPath()
-	// args are constructed internally and not from direct user input
 	cmd := exec.Command(binaryPath, args...)
 
 	var stdout, stderr bytes.Buffer
