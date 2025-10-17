@@ -569,7 +569,7 @@ func TestLoadFromEnv_SpecialCharacterPasswords(t *testing.T) {
 		desc     string
 	}{
 		{
-			name:     "Base64Password",
+			name: "Base64Password",
 			// this is a test credential and is not valid.
 			password: "Pwifqbp1QY2z22LsgCJe40SSQLRumf1FZfEH0jSrUf+D6zX7Rj8cgNbUy82i+5h22dxi8YLD/QWz+ASt52DHYg==",
 			desc:     "Base64 with +, /, =",
