@@ -534,7 +534,7 @@ func TestLoadFromEnv_Base64Password(t *testing.T) {
 	os.Setenv("SMB_SERVER_IP", "192.168.1.100")
 	os.Setenv("SMB_SHARE_NAME", "testshare")
 	os.Setenv("SMB_USERNAME", "testuser")
-	// Real-world Base64 password with +, /, and = characters
+	// Real-world Base64 password with +, /, and = characters - this is a test credential and is not valid
 	base64Password := "Pwifqbp1QY2z22LsgCJe40SSQLRumf1FZfEH0jSrUf+D6zX7Rj8cgNbUy82i+5h22dxi8YLD/QWz+ASt52DHYg=="
 	os.Setenv("SMB_PASSWORD", base64Password)
 
@@ -570,6 +570,7 @@ func TestLoadFromEnv_SpecialCharacterPasswords(t *testing.T) {
 	}{
 		{
 			name:     "Base64Password",
+			// this is a test credential and is not valid.
 			password: "Pwifqbp1QY2z22LsgCJe40SSQLRumf1FZfEH0jSrUf+D6zX7Rj8cgNbUy82i+5h22dxi8YLD/QWz+ASt52DHYg==",
 			desc:     "Base64 with +, /, =",
 		},
