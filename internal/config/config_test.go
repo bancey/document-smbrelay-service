@@ -526,3 +526,203 @@ func TestLoadFromEnv_EmptyDomain(t *testing.T) {
 		t.Errorf("Expected empty Domain, got '%s'", cfg.Domain)
 	}
 }
+
+// Test Base64 password (real-world example from user)
+func TestLoadFromEnv_Base64Password(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "192.168.1.100")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	// Real-world Base64 password with +, /, and = characters
+	base64Password := "Pwifqbp1QY2z22LsgCJe40SSQLRumf1FZfEH0jSrUf+D6zX7Rj8cgNbUy82i+5h22dxi8YLD/QWz+ASt52DHYg=="
+	os.Setenv("SMB_PASSWORD", base64Password)
+
+	cfg, missing := LoadFromEnv()
+
+	// Verify no missing fields
+	if len(missing) > 0 {
+		t.Errorf("Expected no missing fields, got: %v", missing)
+	}
+
+	// Verify password is loaded exactly as provided (no corruption)
+	if cfg.Password != base64Password {
+		t.Errorf("Password not loaded correctly.\nExpected: %s\nGot: %s", base64Password, cfg.Password)
+	}
+
+	// Verify password length is preserved
+	if len(cfg.Password) != len(base64Password) {
+		t.Errorf("Password length changed. Expected: %d, Got: %d", len(base64Password), len(cfg.Password))
+	}
+
+	// Verify special characters are preserved
+	if !containsChar(cfg.Password, '+') || !containsChar(cfg.Password, '/') || !containsChar(cfg.Password, '=') {
+		t.Error("Password should contain Base64 special characters (+, /, =)")
+	}
+}
+
+// Test various passwords with special characters
+func TestLoadFromEnv_SpecialCharacterPasswords(t *testing.T) {
+	testCases := []struct {
+		name     string
+		password string
+		desc     string
+	}{
+		{
+			name:     "Base64Password",
+			password: "Pwifqbp1QY2z22LsgCJe40SSQLRumf1FZfEH0jSrUf+D6zX7Rj8cgNbUy82i+5h22dxi8YLD/QWz+ASt52DHYg==",
+			desc:     "Base64 with +, /, =",
+		},
+		{
+			name:     "SpecialChars",
+			password: "P@ssw0rd!$%^&*()",
+			desc:     "Common special characters",
+		},
+		{
+			name:     "Spaces",
+			password: "My Secret Password 123",
+			desc:     "Password with spaces",
+		},
+		{
+			name:     "Quotes",
+			password: `"'Password'"`,
+			desc:     "Password with quotes",
+		},
+		{
+			name:     "Backslashes",
+			password: `C:\Windows\System32`,
+			desc:     "Password with backslashes",
+		},
+		{
+			name:     "Unicode",
+			password: "Pässwörd™€",
+			desc:     "Password with unicode",
+		},
+		{
+			name:     "AllSpecial",
+			password: "!@#$%^&*()_+-=[]{}\\|;:'\",.<>?/`~",
+			desc:     "All special characters",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Clearenv()
+			os.Setenv("SMB_SERVER_NAME", "testserver")
+			os.Setenv("SMB_SERVER_IP", "192.168.1.100")
+			os.Setenv("SMB_SHARE_NAME", "testshare")
+			os.Setenv("SMB_USERNAME", "testuser")
+			os.Setenv("SMB_PASSWORD", tc.password)
+
+			cfg, missing := LoadFromEnv()
+
+			if len(missing) > 0 {
+				t.Errorf("%s: Expected no missing fields, got: %v", tc.desc, missing)
+			}
+
+			if cfg.Password != tc.password {
+				t.Errorf("%s: Password not preserved.\nExpected: %s\nGot: %s",
+					tc.desc, tc.password, cfg.Password)
+			}
+
+			if len(cfg.Password) != len(tc.password) {
+				t.Errorf("%s: Password length changed. Expected: %d, Got: %d",
+					tc.desc, len(tc.password), len(cfg.Password))
+			}
+		})
+	}
+}
+
+// Helper function to check if string contains a character
+func containsChar(s string, char rune) bool {
+	for _, c := range s {
+		if c == char {
+			return true
+		}
+	}
+	return false
+}
+
+// Test LogSmbCommands configuration with LOG_SMB_COMMANDS env var
+func TestLoadFromEnv_LogSmbCommands_Primary(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "192.168.1.100")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+	os.Setenv("LOG_SMB_COMMANDS", "true")
+
+	cfg, missing := LoadFromEnv()
+
+	if len(missing) > 0 {
+		t.Errorf("Expected no missing fields, got: %v", missing)
+	}
+
+	if !cfg.LogSmbCommands {
+		t.Error("Expected LogSmbCommands to be true when LOG_SMB_COMMANDS=true")
+	}
+}
+
+// Test LogSmbCommands configuration with SMB_LOG_COMMANDS env var (alternative)
+func TestLoadFromEnv_LogSmbCommands_Alternative(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "192.168.1.100")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+	os.Setenv("SMB_LOG_COMMANDS", "true")
+
+	cfg, missing := LoadFromEnv()
+
+	if len(missing) > 0 {
+		t.Errorf("Expected no missing fields, got: %v", missing)
+	}
+
+	if !cfg.LogSmbCommands {
+		t.Error("Expected LogSmbCommands to be true when SMB_LOG_COMMANDS=true")
+	}
+}
+
+// Test LogSmbCommands priority (LOG_SMB_COMMANDS takes precedence)
+func TestLoadFromEnv_LogSmbCommands_Priority(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "192.168.1.100")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+	os.Setenv("LOG_SMB_COMMANDS", "true")
+	os.Setenv("SMB_LOG_COMMANDS", "false")
+
+	cfg, missing := LoadFromEnv()
+
+	if len(missing) > 0 {
+		t.Errorf("Expected no missing fields, got: %v", missing)
+	}
+
+	if !cfg.LogSmbCommands {
+		t.Error("Expected LogSmbCommands to be true (LOG_SMB_COMMANDS should take precedence)")
+	}
+}
+
+// Test LogSmbCommands defaults to false
+func TestLoadFromEnv_LogSmbCommands_Default(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "192.168.1.100")
+	os.Setenv("SMB_SHARE_NAME", "testshare")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+
+	cfg, missing := LoadFromEnv()
+
+	if len(missing) > 0 {
+		t.Errorf("Expected no missing fields, got: %v", missing)
+	}
+
+	if cfg.LogSmbCommands {
+		t.Error("Expected LogSmbCommands to be false by default")
+	}
+}

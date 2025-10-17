@@ -73,6 +73,9 @@ See [QUICKSTART.md](QUICKSTART.md) for more detailed getting started guide.
 - `SMB_SHARE_NAME`: Name of the SMB share (e.g., `Documents`)
 - `SMB_USERNAME`: SMB username for authentication (optional for Kerberos)
 - `SMB_PASSWORD`: SMB password for authentication (optional for Kerberos)
+  - **Supports all special characters** including Base64 (`+`, `/`, `=`), symbols, quotes, spaces, unicode, etc.
+  - Passed securely via environment variables (not visible in process list)
+  - See [BASE64_PASSWORD_SUPPORT.md](BASE64_PASSWORD_SUPPORT.md) for details
 
 ### Optional Environment Variables
 
@@ -81,6 +84,10 @@ See [QUICKSTART.md](QUICKSTART.md) for more detailed getting started guide.
 - `SMB_USE_NTLM_V2`: Enable NTLMv2 (default: `true`, deprecated - use `SMB_AUTH_PROTOCOL`)
 - `SMB_AUTH_PROTOCOL`: Authentication protocol - `negotiate|ntlm|kerberos` (default: derived from `SMB_USE_NTLM_V2`)
 - `LOG_LEVEL`: Application log level - `DEBUG|INFO|WARNING|ERROR` (default: `INFO`)
+- `LOG_SMB_COMMANDS` or `SMB_LOG_COMMANDS`: Enable debug logging of smbclient commands - `true|false` (default: `false`)
+  - Error output visible at INFO level
+  - Success output visible at DEBUG level
+  - See [LOGGING_OUTPUT_IMPROVEMENTS.md](LOGGING_OUTPUT_IMPROVEMENTS.md) for details
 - `PORT`: HTTP server port (default: `8080`)
 - `SMBCLIENT_PATH`: Path to smbclient binary (default: auto-detected from PATH or common locations)
 
@@ -325,10 +332,15 @@ curl "http://localhost:8080/list?path=subfolder" | jq
 
 ## Docker
 
+The Dockerfile uses multi-stage builds with two targets: `production` (default) and `debug`.
+
 ### Build Image
 
+**Standard Production Image (recommended):**
 ```bash
-docker build -f Dockerfile.go -t document-smbrelay:latest .
+docker build -t document-smbrelay:latest .
+# or explicitly:
+docker build --target production -t document-smbrelay:latest .
 ```
 
 Or use Make:
@@ -336,8 +348,25 @@ Or use Make:
 make docker-build
 ```
 
+**Debug Image (with SSH for troubleshooting):**
+```bash
+docker build --target debug -t document-smbrelay:debug .
+```
+
+Or use Make:
+```bash
+make docker-build-debug
+```
+
+The debug image includes:
+- SSH server on port 2222
+- Root access with password `Docker!`
+- Useful for troubleshooting container issues
+- **Not recommended for production use**
+
 ### Run Container
 
+**Standard image:**
 ```bash
 docker run --rm -p 8080:8080 \
   -e SMB_SERVER_NAME=MYSMBSERVER \
@@ -349,17 +378,43 @@ docker run --rm -p 8080:8080 \
   document-smbrelay:latest
 ```
 
+**Debug image (with SSH access):**
+```bash
+docker run --rm -p 8080:8080 -p 2222:2222 \
+  -e SMB_SERVER_NAME=MYSMBSERVER \
+  -e SMB_SERVER_IP=192.168.1.10 \
+  -e SMB_SHARE_NAME=Documents \
+  -e SMB_USERNAME=smbuser \
+  -e SMB_PASSWORD='smb-password' \
+  -e LOG_LEVEL=INFO \
+  document-smbrelay:debug
+
+# SSH into debug container:
+ssh root@localhost -p 2222
+# Password: Docker!
+```
+
 ### Multi-Architecture Builds
 
+**Standard image:**
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -f Dockerfile.go \
+  --target production \
   -t document-smbrelay:latest .
+```
+
+**Debug image:**
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 \
+  --target debug \
+  -t document-smbrelay:debug .
 ```
 
 ### Docker Compose
 
 See [DOCKER_TESTING.md](DOCKER_TESTING.md) for docker-compose examples with test SMB servers.
+
+For detailed information about the standard and debug Docker images, see [DOCKER_IMAGES.md](DOCKER_IMAGES.md).
 
 ## Development
 
@@ -457,8 +512,13 @@ make clean
 - **[QUICKSTART.md](QUICKSTART.md)** - Quick start guide
 - **[README-GO.md](README-GO.md)** - Detailed Go implementation guide  
 - **[VERIFICATION.md](VERIFICATION.md)** - Testing and verification checklist
+- **[BASE64_PASSWORD_SUPPORT.md](BASE64_PASSWORD_SUPPORT.md)** - Base64 and special character password support
+- **[LOGGING_OUTPUT_IMPROVEMENTS.md](LOGGING_OUTPUT_IMPROVEMENTS.md)** - Enhanced error logging and output visibility
+- **[SMB_DEBUG_LOGGING.md](SMB_DEBUG_LOGGING.md)** - Debug logging configuration
+- **[SMB_DEBUG_EXAMPLES.md](SMB_DEBUG_EXAMPLES.md)** - Debug logging examples
 - **[DFS_TESTING.md](DFS_TESTING.md)** - DFS testing guide
 - **[DOCKER_TESTING.md](DOCKER_TESTING.md)** - Docker testing guide
+- **[DOCKER_IMAGES.md](DOCKER_IMAGES.md)** - Docker image variants (standard vs debug)
 
 ## Contributing
 

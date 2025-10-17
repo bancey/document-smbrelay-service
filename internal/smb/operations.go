@@ -32,12 +32,18 @@ func ListFiles(remotePath string, cfg *config.SMBConfig) ([]FileInfo, error) {
 		cmd = fmt.Sprintf(`cd "%s"; ls`, normalizedPath)
 	}
 
-	args, err := buildSmbClientArgs(cfg, cmd)
+	args, env, err := buildSmbClientArgs(cfg, cmd)
 	if err != nil {
 		return nil, err
 	}
 
-	output, err := smbClientExec.Execute(args)
+	var output string
+	if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+		output, err = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+	} else {
+		// For mock executors in tests
+		output, err = smbClientExec.Execute(args)
+	}
 	if err != nil {
 		// Parse error messages
 		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||
@@ -121,12 +127,18 @@ func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, over
 	if !overwrite && remotePath != "" {
 		// Try to stat the file - if it exists, smbclient will show it
 		checkCmd := fmt.Sprintf("ls \"%s\"", remotePath)
-		args, err := buildSmbClientArgs(cfg, checkCmd)
+		args, env, err := buildSmbClientArgs(cfg, checkCmd)
 		if err != nil {
 			return err
 		}
 
-		output, err := smbClientExec.Execute(args)
+		var output string
+		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+			output, err = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+		} else {
+			// For mock executors in tests
+			output, err = smbClientExec.Execute(args)
+		}
 		// If the file is found in the output, it exists
 		// Note: We ignore the error here as the command may fail if file doesn't exist
 		if err == nil && (strings.Contains(output, remotePath) || strings.Contains(output, "blocks of size")) {
@@ -152,12 +164,18 @@ func DeleteFile(remotePath string, cfg *config.SMBConfig) error {
 	// Build the del command
 	cmd := fmt.Sprintf(`del "%s"`, remotePath)
 
-	args, err := buildSmbClientArgs(cfg, cmd)
+	args, env, err := buildSmbClientArgs(cfg, cmd)
 	if err != nil {
 		return err
 	}
 
-	output, err := smbClientExec.Execute(args)
+	var output string
+	if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+		output, err = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+	} else {
+		// For mock executors in tests
+		output, err = smbClientExec.Execute(args)
+	}
 	if err != nil {
 		// Parse error messages
 		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||

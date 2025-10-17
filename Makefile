@@ -1,4 +1,4 @@
-.PHONY: help build run test test-unit test-coverage test-verbose test-race clean docker-build docker-run
+.PHONY: help build run test test-unit test-coverage test-verbose test-race clean docker-build docker-build-debug docker-run
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -49,9 +49,13 @@ clean: ## Clean build artifacts
 	rm -f coverage.out coverage.html
 	go clean
 
-docker-build: ## Build Docker image
-	@echo "Building Docker image..."
-	docker build -f Dockerfile -t document-smbrelay:latest .
+docker-build: ## Build Docker image (production)
+	@echo "Building Docker image (production)..."
+	docker build --target production -t document-smbrelay:latest .
+
+docker-build-debug: ## Build Docker image (debug with SSH)
+	@echo "Building Docker image (debug with SSH)..."
+	docker build --target debug -t document-smbrelay:debug .
 
 docker-run: ## Run Docker container
 	@echo "Running Docker container..."

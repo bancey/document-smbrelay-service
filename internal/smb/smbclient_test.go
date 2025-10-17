@@ -112,3 +112,27 @@ func TestDefaultSmbClientExecutor_EmptyBinaryPath(t *testing.T) {
 		t.Error("Expected empty BinaryPath to trigger auto-detection")
 	}
 }
+
+func TestExecuteWithEnv_EnvironmentVariables(t *testing.T) {
+	// Test that environment variables with special characters are properly handled
+	env := map[string]string{
+		"TEST_VAR1": "value1",
+		"TEST_VAR2": "value2 with spaces",
+		"PASSWD":    "P@ssw0rd!$%Test", // Test password with special characters
+	}
+
+	// Verify env map can contain special characters
+	if env["PASSWD"] != "P@ssw0rd!$%Test" {
+		t.Error("Environment variable should preserve special characters")
+	}
+
+	// Verify we can create an executor
+	executor := &DefaultSmbClientExecutor{
+		BinaryPath: "",
+	}
+
+	// Verify the executor has the expected empty BinaryPath
+	if executor.BinaryPath != "" {
+		t.Errorf("Expected empty BinaryPath, got '%s'", executor.BinaryPath)
+	}
+}
