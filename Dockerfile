@@ -46,7 +46,6 @@ RUN adduser -D -u 1000 appuser && \
     mkdir -p /tmp && \
     chown appuser:appuser /tmp
 
-# Production stage - minimal image (default)
 FROM base AS production
 
 # Switch to non-root user for security
@@ -62,7 +61,9 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 CMD ["/app/server"]
 
 # Debug stage - includes SSH for troubleshooting
-FROM base AS debug
+FROM production AS debug
+
+USER root
 
 # Install OpenSSH and set up SSH access for debugging
 RUN apk add --no-cache openssh su-exec \
@@ -70,21 +71,21 @@ RUN apk add --no-cache openssh su-exec \
     && mkdir -p /var/run/sshd \
     && ssh-keygen -A
 
-# Create sshd_config inline
-RUN cat > /etc/ssh/sshd_config << 'EOF'
-Port 2222
-ListenAddress 0.0.0.0
-LoginGraceTime 180
-X11Forwarding yes
-Ciphers aes128-cbc,3des-cbc,aes256-cbc,aes128-ctr,aes192-ctr,aes256-ctr
-MACs hmac-sha1,hmac-sha1-96
-StrictModes yes
-SyslogFacility DAEMON
-PasswordAuthentication yes
-PermitEmptyPasswords no
-PermitRootLogin yes
-Subsystem sftp internal-sftp
-EOF
+# Create sshd_config inline using printf to avoid heredoc issues in ACR builds
+RUN printf '%s\n' \
+    'Port 2222' \
+    'ListenAddress 0.0.0.0' \
+    'LoginGraceTime 180' \
+    'X11Forwarding yes' \
+    'Ciphers aes128-cbc,3des-cbc,aes256-cbc,aes128-ctr,aes192-ctr,aes256-ctr' \
+    'MACs hmac-sha1,hmac-sha1-96' \
+    'StrictModes yes' \
+    'SyslogFacility DAEMON' \
+    'PasswordAuthentication yes' \
+    'PermitEmptyPasswords no' \
+    'PermitRootLogin yes' \
+    'Subsystem sftp internal-sftp' \
+    > /etc/ssh/sshd_config
 
 COPY entrypoint.debug.sh ./entrypoint.sh
 RUN chmod +x ./entrypoint.sh
