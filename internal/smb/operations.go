@@ -2,12 +2,58 @@ package smb
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/bancey/document-smbrelay-service/internal/config"
 )
+
+// normalizePathSegment normalizes a single path segment by:
+// - Trimming leading/trailing slashes and backslashes
+// - Converting backslashes to forward slashes
+// - Removing duplicate slashes
+func normalizePathSegment(p string) string {
+	// Trim leading/trailing slashes and backslashes
+	p = strings.Trim(p, "/\\")
+
+	// Convert backslashes to forward slashes
+	p = strings.ReplaceAll(p, "\\", "/")
+
+	// Remove duplicate slashes
+	for strings.Contains(p, "//") {
+		p = strings.ReplaceAll(p, "//", "/")
+	}
+
+	return p
+}
+
+// joinSmbPaths joins a base path and a relative path for SMB operations
+// It handles normalization and ensures the result is a clean path
+func joinSmbPaths(basePath, relativePath string) string {
+	// Normalize both segments
+	base := normalizePathSegment(basePath)
+	relative := normalizePathSegment(relativePath)
+
+	// If base is empty, just return relative
+	if base == "" || base == "." {
+		return relative
+	}
+
+	// If relative is empty, just return base
+	if relative == "" || relative == "." {
+		return base
+	}
+
+	// Join using path.Join which handles duplicate slashes
+	return path.Join(base, relative)
+}
+
+// buildFullPath constructs the full path including base path from config
+func buildFullPath(relativePath string, cfg *config.SMBConfig) string {
+	return joinSmbPaths(cfg.BasePath, relativePath)
+}
 
 // FileInfo represents information about a file or directory
 type FileInfo struct {
@@ -19,10 +65,11 @@ type FileInfo struct {
 
 // ListFiles lists files and folders at the given path on the SMB share
 func ListFiles(remotePath string, cfg *config.SMBConfig) ([]FileInfo, error) {
-	// Normalize remote path
-	normalizedPath := strings.TrimPrefix(remotePath, "/")
-	normalizedPath = strings.TrimPrefix(normalizedPath, "\\")
-	normalizedPath = strings.ReplaceAll(normalizedPath, "\\", "/")
+	// Build full path including base path
+	fullPath := buildFullPath(remotePath, cfg)
+
+	// Normalize the full path
+	normalizedPath := normalizePathSegment(fullPath)
 
 	// Build the ls command
 	var cmd string
@@ -118,15 +165,17 @@ func parseLsOutput(output string) []FileInfo {
 
 // UploadFile uploads a local file to the SMB share using smbclient
 func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, overwrite bool) error {
-	// Normalize remote path (remove leading slash)
-	remotePath = strings.TrimPrefix(remotePath, "/")
-	remotePath = strings.TrimPrefix(remotePath, "\\")
+	// Build full path including base path
+	fullPath := buildFullPath(remotePath, cfg)
+
+	// Normalize the full path
+	fullPath = normalizePathSegment(fullPath)
 
 	// If overwrite is false, we need to check if file exists first
-	// Skip the check if remotePath is empty (uploading to root with original filename)
-	if !overwrite && remotePath != "" {
+	// Skip the check if fullPath is empty (uploading to root with original filename)
+	if !overwrite && fullPath != "" {
 		// Try to stat the file - if it exists, smbclient will show it
-		checkCmd := fmt.Sprintf("ls \"%s\"", remotePath)
+		checkCmd := fmt.Sprintf("ls \"%s\"", fullPath)
 		args, env, err := buildSmbClientArgs(cfg, checkCmd)
 		if err != nil {
 			return err
@@ -141,28 +190,29 @@ func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, over
 		}
 		// If the file is found in the output, it exists
 		// Note: We ignore the error here as the command may fail if file doesn't exist
-		if err == nil && (strings.Contains(output, remotePath) || strings.Contains(output, "blocks of size")) {
+		if err == nil && (strings.Contains(output, fullPath) || strings.Contains(output, "blocks of size")) {
 			return fmt.Errorf("remote file already exists: %s", remotePath)
 		}
 	}
 
 	// Upload the file
-	return uploadFileViaSmbClient(localPath, remotePath, cfg)
+	return uploadFileViaSmbClient(localPath, fullPath, cfg)
 }
 
 // DeleteFile deletes a file from the SMB share using smbclient
 func DeleteFile(remotePath string, cfg *config.SMBConfig) error {
-	// Normalize remote path
-	remotePath = strings.TrimPrefix(remotePath, "/")
-	remotePath = strings.TrimPrefix(remotePath, "\\")
-	remotePath = strings.ReplaceAll(remotePath, "\\", "/")
+	// Build full path including base path
+	fullPath := buildFullPath(remotePath, cfg)
 
-	if remotePath == "" || remotePath == "." {
+	// Normalize the full path
+	fullPath = normalizePathSegment(fullPath)
+
+	if fullPath == "" || fullPath == "." {
 		return fmt.Errorf("invalid remote path: cannot delete root directory")
 	}
 
 	// Build the del command
-	cmd := fmt.Sprintf(`del "%s"`, remotePath)
+	cmd := fmt.Sprintf(`del "%s"`, fullPath)
 
 	args, env, err := buildSmbClientArgs(cfg, cmd)
 	if err != nil {

@@ -727,3 +727,79 @@ func TestLoadFromEnv_LogSmbCommands_Default(t *testing.T) {
 		t.Error("Expected LogSmbCommands to be false by default")
 	}
 }
+
+// Test BasePath configuration
+func TestLoadFromEnv_BasePath(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "192.168.1.100")
+	os.Setenv("SMB_SHARE_NAME", "data")
+	os.Setenv("SMB_BASE_PATH", "apps/myapp")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+
+	cfg, missing := LoadFromEnv()
+
+	if len(missing) > 0 {
+		t.Errorf("Expected no missing fields, got: %v", missing)
+	}
+
+	if cfg.BasePath != "apps/myapp" {
+		t.Errorf("Expected BasePath 'apps/myapp', got '%s'", cfg.BasePath)
+	}
+}
+
+// Test BasePath with leading/trailing slashes
+func TestLoadFromEnv_BasePath_Slashes(t *testing.T) {
+	testCases := []struct {
+		name     string
+		value    string
+		expected string
+	}{
+		{"Leading slash", "/apps/myapp", "/apps/myapp"},
+		{"Trailing slash", "apps/myapp/", "apps/myapp/"},
+		{"Both slashes", "/apps/myapp/", "/apps/myapp/"},
+		{"Backslashes", "\\apps\\myapp", "\\apps\\myapp"},
+		{"Mixed slashes", "/apps\\myapp/", "/apps\\myapp/"},
+		{"No slashes", "apps/myapp", "apps/myapp"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Clearenv()
+			os.Setenv("SMB_SERVER_NAME", "testserver")
+			os.Setenv("SMB_SERVER_IP", "192.168.1.100")
+			os.Setenv("SMB_SHARE_NAME", "data")
+			os.Setenv("SMB_BASE_PATH", tc.value)
+			os.Setenv("SMB_USERNAME", "testuser")
+			os.Setenv("SMB_PASSWORD", "testpass")
+
+			cfg, _ := LoadFromEnv()
+
+			if cfg.BasePath != tc.expected {
+				t.Errorf("For value '%s', expected BasePath='%s', got '%s'",
+					tc.value, tc.expected, cfg.BasePath)
+			}
+		})
+	}
+}
+
+// Test BasePath defaults to empty
+func TestLoadFromEnv_BasePath_Default(t *testing.T) {
+	os.Clearenv()
+	os.Setenv("SMB_SERVER_NAME", "testserver")
+	os.Setenv("SMB_SERVER_IP", "192.168.1.100")
+	os.Setenv("SMB_SHARE_NAME", "data")
+	os.Setenv("SMB_USERNAME", "testuser")
+	os.Setenv("SMB_PASSWORD", "testpass")
+
+	cfg, missing := LoadFromEnv()
+
+	if len(missing) > 0 {
+		t.Errorf("Expected no missing fields, got: %v", missing)
+	}
+
+	if cfg.BasePath != "" {
+		t.Errorf("Expected empty BasePath by default, got '%s'", cfg.BasePath)
+	}
+}

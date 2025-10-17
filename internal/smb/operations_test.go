@@ -1441,3 +1441,201 @@ func TestDeleteFile_ConnectionError(t *testing.T) {
 		t.Error("Expected error when deleting from invalid server")
 	}
 }
+
+// ============================================================================
+// Path Utility Function Tests
+// ============================================================================
+
+func TestNormalizePathSegment(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"Empty string", "", ""},
+		{"Single dot", ".", "."},
+		{"Forward slash", "/", ""},
+		{"Backslash", "\\", ""},
+		{"Leading slash", "/path/to/file", "path/to/file"},
+		{"Trailing slash", "path/to/file/", "path/to/file"},
+		{"Both slashes", "/path/to/file/", "path/to/file"},
+		{"Backslashes to forward", "path\\to\\file", "path/to/file"},
+		{"Mixed slashes", "/path\\to/file\\", "path/to/file"},
+		{"Double slashes", "path//to//file", "path/to/file"},
+		{"Multiple leading slashes", "///path/to/file", "path/to/file"},
+		{"Multiple trailing slashes", "path/to/file///", "path/to/file"},
+		{"Complex path", "\\\\path//to\\\\file//", "path/to/file"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := normalizePathSegment(tc.input)
+			if result != tc.expected {
+				t.Errorf("For input '%s', expected '%s', got '%s'", tc.input, tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestJoinSmbPaths(t *testing.T) {
+	testCases := []struct {
+		name         string
+		basePath     string
+		relativePath string
+		expected     string
+	}{
+		{"Both empty", "", "", ""},
+		{"Base empty, relative set", "", "file.txt", "file.txt"},
+		{"Base set, relative empty", "apps/myapp", "", "apps/myapp"},
+		{"Both set simple", "apps/myapp", "file.txt", "apps/myapp/file.txt"},
+		{"Both set with subdirs", "apps/myapp", "inbox/file.txt", "apps/myapp/inbox/file.txt"},
+		{"Base with trailing slash", "apps/myapp/", "file.txt", "apps/myapp/file.txt"},
+		{"Relative with leading slash", "apps/myapp", "/file.txt", "apps/myapp/file.txt"},
+		{"Both with slashes", "apps/myapp/", "/file.txt", "apps/myapp/file.txt"},
+		{"Base with backslashes", "apps\\myapp", "file.txt", "apps/myapp/file.txt"},
+		{"Relative with backslashes", "apps/myapp", "inbox\\file.txt", "apps/myapp/inbox/file.txt"},
+		{"Mixed slashes", "apps\\myapp/", "\\inbox/file.txt", "apps/myapp/inbox/file.txt"},
+		{"Base is dot", ".", "file.txt", "file.txt"},
+		{"Relative is dot", "apps/myapp", ".", "apps/myapp"},
+		{"Both are dots", ".", ".", "."},
+		{"Complex path", "/apps//myapp\\", "\\inbox//file.txt", "apps/myapp/inbox/file.txt"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := joinSmbPaths(tc.basePath, tc.relativePath)
+			if result != tc.expected {
+				t.Errorf("joinSmbPaths('%s', '%s'): expected '%s', got '%s'",
+					tc.basePath, tc.relativePath, tc.expected, result)
+			}
+		})
+	}
+}
+
+func TestBuildFullPath(t *testing.T) {
+	testCases := []struct {
+		name         string
+		basePath     string
+		relativePath string
+		expected     string
+	}{
+		{"No base path", "", "file.txt", "file.txt"},
+		{"Simple base path", "apps/myapp", "file.txt", "apps/myapp/file.txt"},
+		{"Nested relative path", "apps/myapp", "inbox/document.pdf", "apps/myapp/inbox/document.pdf"},
+		{"Base with trailing slash", "apps/myapp/", "file.txt", "apps/myapp/file.txt"},
+		{"Relative with leading slash", "apps/myapp", "/file.txt", "apps/myapp/file.txt"},
+		{"Backslash normalization", "apps\\myapp", "inbox\\file.txt", "apps/myapp/inbox/file.txt"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &config.SMBConfig{
+				BasePath: tc.basePath,
+			}
+			result := buildFullPath(tc.relativePath, cfg)
+			if result != tc.expected {
+				t.Errorf("buildFullPath('%s', cfg{BasePath:'%s'}): expected '%s', got '%s'",
+					tc.relativePath, tc.basePath, tc.expected, result)
+			}
+		})
+	}
+}
+
+// ============================================================================
+// Integration Tests with Base Path
+// ============================================================================
+
+func TestListFiles_WithBasePath(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Use mock that returns a simple file listing
+	mockOutput := `  file1.txt                           A     1024  Mon Jan  1 12:00:00 2024
+  file2.txt                           A     2048  Mon Jan  1 12:00:00 2024
+
+		32768 blocks of size 1024. 16384 blocks available`
+	smbClientExec = NewMockExecutorWithOutput(mockOutput)
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "127.0.0.1",
+		ShareName:    "data",
+		BasePath:     "apps/myapp",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	// List files in "inbox" which should resolve to "apps/myapp/inbox"
+	files, err := ListFiles("inbox", cfg)
+	if err != nil {
+		t.Fatalf("Expected successful listing, got error: %v", err)
+	}
+
+	if len(files) != 2 {
+		t.Errorf("Expected 2 files, got %d", len(files))
+	}
+}
+
+func TestUploadFile_WithBasePath(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Use mock that simulates successful upload
+	smbClientExec = SetupSuccessfulMock()
+
+	// Create a temporary test file
+	tmpDir := os.TempDir()
+	tmpFile := filepath.Join(tmpDir, "test-upload.txt")
+	err := os.WriteFile(tmpFile, []byte("test content"), 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+	defer os.Remove(tmpFile)
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "127.0.0.1",
+		ShareName:    "data",
+		BasePath:     "apps/myapp",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	// Upload to "inbox/file.txt" which should resolve to "apps/myapp/inbox/file.txt"
+	err = UploadFile(tmpFile, "inbox/file.txt", cfg, false)
+	if err != nil {
+		t.Errorf("Expected successful upload, got error: %v", err)
+	}
+}
+
+func TestDeleteFile_WithBasePath(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Use mock that simulates successful deletion
+	smbClientExec = SetupSuccessfulMock()
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "127.0.0.1",
+		ShareName:    "data",
+		BasePath:     "apps/myapp",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	// Delete "inbox/file.txt" which should resolve to "apps/myapp/inbox/file.txt"
+	err := DeleteFile("inbox/file.txt", cfg)
+	if err != nil {
+		t.Errorf("Expected successful deletion, got error: %v", err)
+	}
+}

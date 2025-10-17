@@ -25,6 +25,7 @@ type SMBConfig struct {
 	ServerName     string
 	ServerIP       string
 	ShareName      string
+	BasePath       string // Base path within the share (e.g., "apps/myapp")
 	Username       string
 	Password       string
 	Domain         string
@@ -79,6 +80,7 @@ func LoadFromEnv() (*SMBConfig, []string) {
 	serverName := os.Getenv("SMB_SERVER_NAME")
 	serverIP := os.Getenv("SMB_SERVER_IP")
 	shareName := os.Getenv("SMB_SHARE_NAME")
+	basePath := os.Getenv("SMB_BASE_PATH")
 	username := os.Getenv("SMB_USERNAME")
 	password := os.Getenv("SMB_PASSWORD")
 	domain := os.Getenv("SMB_DOMAIN")
@@ -105,6 +107,7 @@ func LoadFromEnv() (*SMBConfig, []string) {
 		ServerName:     serverName,
 		ServerIP:       serverIP,
 		ShareName:      shareName,
+		BasePath:       basePath,
 		Username:       username,
 		Password:       password,
 		Domain:         domain,

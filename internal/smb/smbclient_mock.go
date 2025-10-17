@@ -96,3 +96,13 @@ func SetupFailureMock(errorType string) *MockSmbClientExecutor {
 	}
 	return mock
 }
+
+// NewMockExecutorWithOutput creates a mock that returns the specified output
+func NewMockExecutorWithOutput(output string) *MockSmbClientExecutor {
+	mock := &MockSmbClientExecutor{
+		ExecuteFunc: func(_ []string) (string, error) {
+			return output, nil
+		},
+	}
+	return mock
+}

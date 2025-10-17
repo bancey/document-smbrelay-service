@@ -285,6 +285,45 @@ func testConnection(cfg *config.SMBConfig) error {
 	return nil
 }
 
+// testBasePath validates that the configured base path exists on the SMB share
+func testBasePath(cfg *config.SMBConfig) error {
+	// Normalize base path
+	basePath := strings.Trim(cfg.BasePath, "/\\")
+	basePath = strings.ReplaceAll(basePath, "\\", "/")
+
+	if basePath == "" || basePath == "." {
+		return nil // No base path to validate
+	}
+
+	// Try to list the base path
+	cmd := fmt.Sprintf("ls \"%s\"", basePath)
+	args, env, err := buildSmbClientArgs(cfg, cmd)
+	if err != nil {
+		return err
+	}
+
+	var output string
+	if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+		output, err = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+	} else {
+		// For mock executors in tests
+		output, err = smbClientExec.Execute(args)
+	}
+	if err != nil {
+		// Parse error messages
+		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||
+			strings.Contains(output, "NT_STATUS_OBJECT_PATH_NOT_FOUND") {
+			return fmt.Errorf("base path does not exist: %s", cfg.BasePath)
+		}
+		if strings.Contains(output, "NT_STATUS_ACCESS_DENIED") {
+			return fmt.Errorf("access denied to base path: %s", cfg.BasePath)
+		}
+		return fmt.Errorf("failed to access base path: %w", err)
+	}
+
+	return nil
+}
+
 // uploadFileViaSmbClient uploads a file using smbclient
 func uploadFileViaSmbClient(localPath string, remotePath string, cfg *config.SMBConfig) error {
 	// Normalize remote path - remove leading slash

@@ -81,6 +81,10 @@ See [QUICKSTART.md](QUICKSTART.md) for more detailed getting started guide.
 
 - `SMB_DOMAIN`: SMB domain/workgroup (default: empty)
 - `SMB_PORT`: SMB port (default: `445`)
+- `SMB_BASE_PATH`: Base path within the SMB share to restrict operations to a specific subdirectory (default: empty - full share access)
+  - Example: `apps/myapp` restricts all file operations to that subdirectory
+  - All relative paths in API requests are resolved relative to this base path
+  - See [Base Path Configuration](#base-path-configuration) section below
 - `SMB_USE_NTLM_V2`: Enable NTLMv2 (default: `true`, deprecated - use `SMB_AUTH_PROTOCOL`)
 - `SMB_AUTH_PROTOCOL`: Authentication protocol - `negotiate|ntlm|kerberos` (default: derived from `SMB_USE_NTLM_V2`)
 - `LOG_LEVEL`: Application log level - `DEBUG|INFO|WARNING|ERROR` (default: `INFO`)
@@ -137,11 +141,63 @@ export SMB_PASSWORD=mypassword
 
 See [DFS_TESTING.md](DFS_TESTING.md) for more details.
 
+## Base Path Configuration
+
+You can configure the service to operate within a specific subdirectory of an SMB share using the `SMB_BASE_PATH` environment variable. This is useful when you want to restrict file operations to a specific folder.
+
+**Example Scenario:**
+
+Your SMB share structure:
+```
+\\example.com\data\
+  ├── apps/
+  │   ├── myapp/          ← You want operations here
+  │   │   ├── inbox/
+  │   │   └── archive/
+  │   └── otherapp/
+  └── shared/
+```
+
+**Configuration:**
+
+```bash
+export SMB_SERVER_NAME=example.com
+export SMB_SERVER_IP=192.168.1.10
+export SMB_SHARE_NAME=data
+export SMB_BASE_PATH=apps/myapp    # Restrict to this subdirectory
+export SMB_USERNAME=myuser
+export SMB_PASSWORD=mypassword
+```
+
+**How It Works:**
+
+With `SMB_BASE_PATH=apps/myapp`, all API operations are relative to that directory:
+
+- Uploading to `inbox/file.pdf` → Stored at `\\example.com\data\apps\myapp\inbox\file.pdf`
+- Listing `archive` → Lists `\\example.com\data\apps\myapp\archive\`
+- Deleting `old.txt` → Deletes `\\example.com\data\apps\myapp\old.txt`
+
+**Benefits:**
+
+- ✅ **Security**: Prevents access to files outside the base path
+- ✅ **Simplicity**: API clients don't need to know the full share structure
+- ✅ **Multi-tenancy**: Deploy multiple instances with different base paths
+- ✅ **Validation**: Health check verifies the base path exists and is accessible
+
+**Notes:**
+
+- Base path uses forward slashes (`/`) for consistency
+- Leading and trailing slashes are automatically normalized
+- Backslashes (`\`) are automatically converted to forward slashes
+- Leave empty (default) for full share access
+
 ## API Endpoints
 
 ### GET /health
 
 Health check endpoint that verifies application and SMB connectivity.
+
+**Note:** If `SMB_BASE_PATH` is configured, the health check also validates that the base path exists and is accessible.
 
 **Response (200 OK)**:
 ```json
@@ -161,6 +217,16 @@ Health check endpoint that verifies application and SMB connectivity.
   "status": "unhealthy",
   "smb_connection": "failed",
   "error": "connection error details"
+}
+```
+
+**Response (503 with invalid base path)**:
+```json
+{
+  "status": "unhealthy",
+  "smb_connection": "ok",
+  "smb_share_accessible": false,
+  "error": "base path validation failed: base path does not exist: apps/myapp"
 }
 ```
 
@@ -328,6 +394,46 @@ curl http://localhost:8080/list | jq
 ### List files in a subdirectory
 ```bash
 curl "http://localhost:8080/list?path=subfolder" | jq
+```
+
+## Usage Examples with Base Path
+
+When using `SMB_BASE_PATH`, all operations are relative to that directory:
+
+### Configuration
+```bash
+export SMB_SERVER_NAME=example.com
+export SMB_SERVER_IP=192.168.1.10
+export SMB_SHARE_NAME=data
+export SMB_BASE_PATH=apps/myapp    # Restrict to this subdirectory
+export SMB_USERNAME=myuser
+export SMB_PASSWORD=mypassword
+```
+
+### Upload to base path + relative path
+```bash
+# Uploads to: \\example.com\data\apps\myapp\inbox\report.pdf
+curl -X POST http://localhost:8080/upload \
+  -F file=@report.pdf \
+  -F remote_path=inbox/report.pdf
+```
+
+### List files in base path + subdirectory
+```bash
+# Lists: \\example.com\data\apps\myapp\archive\
+curl "http://localhost:8080/list?path=archive" | jq
+```
+
+### Delete from base path
+```bash
+# Deletes: \\example.com\data\apps\myapp\old.txt
+curl -X DELETE "http://localhost:8080/delete?path=old.txt"
+```
+
+### Health check validates base path
+```bash
+# Verifies that \\example.com\data\apps\myapp exists and is accessible
+curl http://localhost:8080/health | jq
 ```
 
 ## Docker

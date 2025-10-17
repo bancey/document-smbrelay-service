@@ -115,6 +115,10 @@ The service requires these environment variables to operate:
 Optional environment variables:
 - `SMB_DOMAIN`: SMB domain/workgroup (default: empty)
 - `SMB_PORT`: SMB port (default: 445)
+- `SMB_BASE_PATH`: Base path within the share to restrict operations to a specific subdirectory (default: empty - full share access)
+  - Example: `apps/myapp` restricts all operations to `\\server\share\apps\myapp`
+  - All API paths are resolved relative to this base path
+  - Health check validates the base path exists
 - `SMB_USE_NTLM_V2`: Enable NTLMv2 authentication (default: true, deprecated - use SMB_AUTH_PROTOCOL instead)
 - `SMB_AUTH_PROTOCOL`: Authentication protocol - `negotiate|ntlm` (default: derived from SMB_USE_NTLM_V2)
 - `LOG_LEVEL`: Application log level - `DEBUG|INFO|WARNING|ERROR` (default: INFO)

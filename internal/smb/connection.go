@@ -2,6 +2,8 @@
 package smb
 
 import (
+	"fmt"
+
 	"github.com/bancey/document-smbrelay-service/internal/config"
 )
 
@@ -40,6 +42,18 @@ func CheckHealth(cfg *config.SMBConfig) *HealthCheckResult {
 		result.SMBShareAccessible = false
 		result.Error = err.Error()
 		return result
+	}
+
+	// If a base path is configured, validate it exists
+	if cfg.BasePath != "" {
+		err = testBasePath(cfg)
+		if err != nil {
+			result.Status = statusUnhealthy
+			result.SMBConnection = statusOK
+			result.SMBShareAccessible = false
+			result.Error = fmt.Sprintf("base path validation failed: %v", err)
+			return result
+		}
 	}
 
 	result.Status = statusHealthy
