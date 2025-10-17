@@ -93,7 +93,7 @@ func TestCheckHealth_InvalidServer(t *testing.T) {
 
 func TestHealthCheckResult_Fields(t *testing.T) {
 	result := &HealthCheckResult{
-		Status:             "healthy",
+		Status:             statusHealthy,
 		AppStatus:          "ok",
 		SMBConnection:      "ok",
 		SMBShareAccessible: true,
@@ -102,7 +102,7 @@ func TestHealthCheckResult_Fields(t *testing.T) {
 		Error:              "",
 	}
 
-	if result.Status != "healthy" {
+	if result.Status != statusHealthy {
 		t.Errorf("Expected status 'healthy', got '%s'", result.Status)
 	}
 
@@ -274,7 +274,7 @@ func TestCheckHealth_SuccessfulConnection(t *testing.T) {
 
 	result := CheckHealth(cfg)
 
-	if result.Status != "healthy" {
+	if result.Status != statusHealthy {
 		t.Errorf("Expected status 'healthy', got '%s'", result.Status)
 	}
 
@@ -631,5 +631,106 @@ func TestCheckHealth_ErrorContainsDetail(t *testing.T) {
 				t.Error("Expected error message to be present")
 			}
 		})
+	}
+}
+
+// Test CheckHealth with nested base path
+func TestCheckHealth_WithNestedBasePath(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Use mock that simulates successful connection
+	smbClientExec = SetupSuccessfulMock()
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "127.0.0.1",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+		BasePath:     "apps/myapp",
+	}
+
+	result := CheckHealth(cfg)
+
+	if result.Status != statusHealthy {
+		t.Errorf("Expected status 'healthy', got '%s'", result.Status)
+	}
+
+	if result.SMBConnection != "ok" {
+		t.Errorf("Expected smb_connection 'ok', got '%s'", result.SMBConnection)
+	}
+
+	if !result.SMBShareAccessible {
+		t.Error("Expected smb_share_accessible to be true")
+	}
+
+	if result.Error != "" {
+		t.Errorf("Expected no error, got '%s'", result.Error)
+	}
+}
+
+// Test CheckHealth with base path that doesn't exist
+func TestCheckHealth_BasePathNotFound(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Use mock that simulates path not found error
+	smbClientExec = SetupFailureMock("path_not_found")
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "127.0.0.1",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+		BasePath:     "nonexistent/path",
+	}
+
+	result := CheckHealth(cfg)
+
+	if result.Status != statusUnhealthy {
+		t.Errorf("Expected status 'unhealthy', got '%s'", result.Status)
+	}
+
+	if result.Error == "" {
+		t.Error("Expected error message for nonexistent base path")
+	}
+}
+
+// Test CheckHealth with base path access denied
+func TestCheckHealth_BasePathAccessDenied(t *testing.T) {
+	// Save original executor and restore after test
+	origExec := smbClientExec
+	defer func() { smbClientExec = origExec }()
+
+	// Use mock that simulates access denied error
+	smbClientExec = SetupFailureMock("access_denied")
+
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "127.0.0.1",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+		BasePath:     "restricted/path",
+	}
+
+	result := CheckHealth(cfg)
+
+	if result.Status != statusUnhealthy {
+		t.Errorf("Expected status 'unhealthy', got '%s'", result.Status)
+	}
+
+	if result.Error == "" {
+		t.Error("Expected error message for access denied to base path")
 	}
 }

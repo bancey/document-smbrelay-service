@@ -295,8 +295,9 @@ func testBasePath(cfg *config.SMBConfig) error {
 		return nil // No base path to validate
 	}
 
-	// Try to list the base path
-	cmd := fmt.Sprintf("ls \"%s\"", basePath)
+	// Try to change to the base path directory - this validates it exists and is accessible
+	// Using 'cd' works correctly for nested directories like "apps/myapp"
+	cmd := fmt.Sprintf("cd \"%s\"", basePath)
 	args, env, err := buildSmbClientArgs(cfg, cmd)
 	if err != nil {
 		return err
