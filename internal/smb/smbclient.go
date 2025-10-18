@@ -254,14 +254,19 @@ func testConnection(cfg *config.SMBConfig) error {
 		return err
 	}
 
-	// Use ExecuteWithEnvAndLogging with logging flag from config
-	var output string
-	if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-		output, err = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-	} else {
-		// For mock executors in tests
-		output, err = smbClientExec.Execute(args)
-	}
+	// Execute with retry logic
+	output, err := executeWithRetry("SMB connection test", cfg, func() (string, error) {
+		var out string
+		var execErr error
+		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+			out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+		} else {
+			// For mock executors in tests
+			out, execErr = smbClientExec.Execute(args)
+		}
+		return out, execErr
+	})
+
 	if err != nil {
 		// Parse error message to provide more context
 		if strings.Contains(output, "NT_STATUS_BAD_NETWORK_NAME") {
@@ -303,13 +308,19 @@ func testBasePath(cfg *config.SMBConfig) error {
 		return err
 	}
 
-	var output string
-	if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-		output, err = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-	} else {
-		// For mock executors in tests
-		output, err = smbClientExec.Execute(args)
-	}
+	// Execute with retry logic
+	output, err := executeWithRetry("Base path validation", cfg, func() (string, error) {
+		var out string
+		var execErr error
+		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+			out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+		} else {
+			// For mock executors in tests
+			out, execErr = smbClientExec.Execute(args)
+		}
+		return out, execErr
+	})
+
 	if err != nil {
 		// Parse error messages
 		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||
@@ -348,12 +359,18 @@ func uploadFileViaSmbClient(localPath string, remotePath string, cfg *config.SMB
 		if err != nil {
 			return err
 		}
-		// Try to create the parent directory, ignoring errors as it might already exist
-		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-			_, _ = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands) // nolint:errcheck
-		} else {
-			_, _ = smbClientExec.Execute(args) // nolint:errcheck
-		}
+		// Try to create the parent directory with retry, ignoring errors as it might already exist
+		_, _ = executeWithRetry("Create parent directory", cfg, func() (string, error) {
+			var out string
+			var execErr error
+			if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+				out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+			} else {
+				// For mock executors in tests
+				out, execErr = smbClientExec.Execute(args)
+			}
+			return out, execErr
+		}) // nolint:errcheck
 	}
 
 	// Build the put command
@@ -369,13 +386,19 @@ func uploadFileViaSmbClient(localPath string, remotePath string, cfg *config.SMB
 		return err
 	}
 
-	var output string
-	if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-		output, err = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-	} else {
-		// For mock executors in tests
-		output, err = smbClientExec.Execute(args)
-	}
+	// Execute with retry logic
+	output, err := executeWithRetry("Upload file", cfg, func() (string, error) {
+		var out string
+		var execErr error
+		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+			out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+		} else {
+			// For mock executors in tests
+			out, execErr = smbClientExec.Execute(args)
+		}
+		return out, execErr
+	})
+
 	if err != nil {
 		// Parse error messages
 		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_COLLISION") {

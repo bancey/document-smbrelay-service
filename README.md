@@ -95,6 +95,37 @@ See [QUICKSTART.md](QUICKSTART.md) for more detailed getting started guide.
 - `PORT`: HTTP server port (default: `8080`)
 - `SMBCLIENT_PATH`: Path to smbclient binary (default: auto-detected from PATH or common locations)
 
+#### Retry Configuration
+
+The service automatically retries network-related SMB operations (connection failures, timeouts, etc.) with configurable exponential backoff:
+
+- `SMB_MAX_RETRIES`: Maximum number of retry attempts for transient network errors (default: `3`)
+  - Set to `0` to disable retries
+  - Each SMB operation will attempt up to `1 + SMB_MAX_RETRIES` times (initial attempt + retries)
+- `SMB_RETRY_INITIAL_DELAY`: Initial delay in seconds before first retry (default: `1.0`)
+- `SMB_RETRY_MAX_DELAY`: Maximum delay in seconds between retries (default: `30.0`)
+- `SMB_RETRY_BACKOFF`: Exponential backoff multiplier (default: `2.0`)
+  - Delay calculation: `initial_delay * (backoff ^ attempt_number)`, capped at `max_delay`
+
+**What gets retried:**
+- Transient network errors: connection refused, timeouts, network unreachable, broken pipe
+- SMB protocol timeouts: `NT_STATUS_IO_TIMEOUT`, `NT_STATUS_CONNECTION_REFUSED`
+
+**What doesn't get retried:**
+- Authentication failures: `NT_STATUS_LOGON_FAILURE`
+- Permission errors: `NT_STATUS_ACCESS_DENIED`
+- Invalid share: `NT_STATUS_BAD_NETWORK_NAME`
+- File not found: `NT_STATUS_OBJECT_NAME_NOT_FOUND`
+- File conflicts: `NT_STATUS_OBJECT_NAME_COLLISION`
+
+**Example with custom retry settings:**
+```bash
+export SMB_MAX_RETRIES=5              # Allow up to 5 retries
+export SMB_RETRY_INITIAL_DELAY=2.0    # Start with 2 second delay
+export SMB_RETRY_MAX_DELAY=60.0       # Cap delays at 60 seconds
+export SMB_RETRY_BACKOFF=2.0          # Double delay each retry (2s, 4s, 8s, 16s, 32s, 60s)
+```
+
 ## Authentication Methods
 
 ### 1. NTLM (Default)
@@ -674,6 +705,12 @@ For issues, questions, or contributions, please open an issue on GitHub.
 - `SMB_USE_NTLM_V2`: `true|false` (default: `true`, deprecated - use `SMB_AUTH_PROTOCOL` instead)
 - `SMB_AUTH_PROTOCOL`: Authentication protocol - `negotiate|ntlm` (default: derived from `SMB_USE_NTLM_V2`)
 - `LOG_LEVEL`: Application log level - `DEBUG|INFO|WARNING|ERROR|CRITICAL` (default: `INFO`)
+
+**Retry Configuration** (for unreliable networks)
+- `SMB_MAX_RETRIES`: Maximum retry attempts for network errors (default: `3`)
+- `SMB_RETRY_INITIAL_DELAY`: Initial retry delay in seconds (default: `1.0`)
+- `SMB_RETRY_MAX_DELAY`: Maximum retry delay in seconds (default: `30.0`)
+- `SMB_RETRY_BACKOFF`: Exponential backoff multiplier (default: `2.0`)
 
 **Authentication Methods**
 
