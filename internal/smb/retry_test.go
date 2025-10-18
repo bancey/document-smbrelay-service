@@ -10,6 +10,22 @@ import (
 	"github.com/bancey/document-smbrelay-service/internal/config"
 )
 
+// Test constants for retry tests
+const (
+	testOutputSuccess           = "success"
+	testOutputConnectionRefused = "Connection refused"
+)
+
+// Helper function to create a test config with short delays for testing
+func createTestRetryConfig(maxRetries int) *config.SMBConfig {
+	return &config.SMBConfig{
+		MaxRetries:        maxRetries,
+		InitialRetryDelay: 0.01, // Short delay for testing
+		MaxRetryDelay:     1.0,
+		RetryBackoff:      2.0,
+	}
+}
+
 func TestIsRetryableError_ConnectionRefused(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -158,17 +174,12 @@ func TestCalculateBackoff(t *testing.T) {
 }
 
 func TestExecuteWithRetry_Success(t *testing.T) {
-	cfg := &config.SMBConfig{
-		MaxRetries:        3,
-		InitialRetryDelay: 0.01, // Short delay for testing
-		MaxRetryDelay:     1.0,
-		RetryBackoff:      2.0,
-	}
+	cfg := createTestRetryConfig(3)
 
 	callCount := 0
 	fn := func() (string, error) {
 		callCount++
-		return "success", nil
+		return testOutputSuccess, nil
 	}
 
 	output, err := executeWithRetry("test operation", cfg, fn)
@@ -176,7 +187,7 @@ func TestExecuteWithRetry_Success(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
-	if output != "success" {
+	if output != testOutputSuccess {
 		t.Errorf("Expected output 'success', got: %s", output)
 	}
 	if callCount != 1 {
@@ -185,20 +196,15 @@ func TestExecuteWithRetry_Success(t *testing.T) {
 }
 
 func TestExecuteWithRetry_TransientErrorThenSuccess(t *testing.T) {
-	cfg := &config.SMBConfig{
-		MaxRetries:        3,
-		InitialRetryDelay: 0.01, // Short delay for testing
-		MaxRetryDelay:     1.0,
-		RetryBackoff:      2.0,
-	}
+	cfg := createTestRetryConfig(3)
 
 	callCount := 0
 	fn := func() (string, error) {
 		callCount++
 		if callCount < 3 {
-			return "Connection refused", errors.New("connection refused")
+			return testOutputConnectionRefused, errors.New("connection refused")
 		}
-		return "success", nil
+		return testOutputSuccess, nil
 	}
 
 	start := time.Now()
@@ -208,7 +214,7 @@ func TestExecuteWithRetry_TransientErrorThenSuccess(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
-	if output != "success" {
+	if output != testOutputSuccess {
 		t.Errorf("Expected output 'success', got: %s", output)
 	}
 	if callCount != 3 {
@@ -221,17 +227,12 @@ func TestExecuteWithRetry_TransientErrorThenSuccess(t *testing.T) {
 }
 
 func TestExecuteWithRetry_NonRetryableError(t *testing.T) {
-	cfg := &config.SMBConfig{
-		MaxRetries:        3,
-		InitialRetryDelay: 0.01, // Short delay for testing
-		MaxRetryDelay:     1.0,
-		RetryBackoff:      2.0,
-	}
+	cfg := createTestRetryConfig(3)
 
 	callCount := 0
 	fn := func() (string, error) {
 		callCount++
-		return "NT_STATUS_ACCESS_DENIED", errors.New("access denied")
+		return testStatusAccessDenied, errors.New("access denied")
 	}
 
 	output, err := executeWithRetry("test operation", cfg, fn)
@@ -239,7 +240,7 @@ func TestExecuteWithRetry_NonRetryableError(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
-	if output != "NT_STATUS_ACCESS_DENIED" {
+	if output != testStatusAccessDenied {
 		t.Errorf("Expected output 'NT_STATUS_ACCESS_DENIED', got: %s", output)
 	}
 	if callCount != 1 {
@@ -248,17 +249,12 @@ func TestExecuteWithRetry_NonRetryableError(t *testing.T) {
 }
 
 func TestExecuteWithRetry_MaxRetriesExceeded(t *testing.T) {
-	cfg := &config.SMBConfig{
-		MaxRetries:        2, // Only 2 retries allowed
-		InitialRetryDelay: 0.01,
-		MaxRetryDelay:     1.0,
-		RetryBackoff:      2.0,
-	}
+	cfg := createTestRetryConfig(2) // Only 2 retries allowed
 
 	callCount := 0
 	fn := func() (string, error) {
 		callCount++
-		return "Connection refused", errors.New("connection refused")
+		return testOutputConnectionRefused, errors.New("connection refused")
 	}
 
 	output, err := executeWithRetry("test operation", cfg, fn)
@@ -266,7 +262,7 @@ func TestExecuteWithRetry_MaxRetriesExceeded(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
-	if output != "Connection refused" {
+	if output != testOutputConnectionRefused {
 		t.Errorf("Expected output 'Connection refused', got: %s", output)
 	}
 	// Should be called 3 times: initial + 2 retries
@@ -276,17 +272,12 @@ func TestExecuteWithRetry_MaxRetriesExceeded(t *testing.T) {
 }
 
 func TestExecuteWithRetry_ZeroRetries(t *testing.T) {
-	cfg := &config.SMBConfig{
-		MaxRetries:        0, // No retries
-		InitialRetryDelay: 0.01,
-		MaxRetryDelay:     1.0,
-		RetryBackoff:      2.0,
-	}
+	cfg := createTestRetryConfig(0) // No retries
 
 	callCount := 0
 	fn := func() (string, error) {
 		callCount++
-		return "Connection refused", errors.New("connection refused")
+		return testOutputConnectionRefused, errors.New("connection refused")
 	}
 
 	output, err := executeWithRetry("test operation", cfg, fn)
@@ -294,7 +285,7 @@ func TestExecuteWithRetry_ZeroRetries(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
-	if output != "Connection refused" {
+	if output != testOutputConnectionRefused {
 		t.Errorf("Expected output 'Connection refused', got: %s", output)
 	}
 	// Should be called only once with no retries
@@ -340,19 +331,14 @@ func TestUploadFile_WithTransientError(t *testing.T) {
 		},
 	}
 
-	cfg := &config.SMBConfig{
-		ServerName:        "testserver",
-		ServerIP:          "127.0.0.1",
-		ShareName:         "testshare",
-		Username:          "testuser",
-		Password:          "testpass",
-		Port:              445,
-		AuthProtocol:      "ntlm",
-		MaxRetries:        3,
-		InitialRetryDelay: 0.01, // Short delay for testing
-		MaxRetryDelay:     1.0,
-		RetryBackoff:      2.0,
-	}
+	cfg := createTestRetryConfig(3)
+	cfg.ServerName = "testserver"
+	cfg.ServerIP = "127.0.0.1"
+	cfg.ShareName = "testshare"
+	cfg.Username = "testuser"
+	cfg.Password = "testpass"
+	cfg.Port = 445
+	cfg.AuthProtocol = "ntlm"
 
 	// Create a temporary test file
 	tmpFile := "/tmp/test-retry-upload.txt"

@@ -360,17 +360,22 @@ func uploadFileViaSmbClient(localPath string, remotePath string, cfg *config.SMB
 			return err
 		}
 		// Try to create the parent directory with retry, ignoring errors as it might already exist
-		_, _ = executeWithRetry("Create parent directory", cfg, func() (string, error) {
-			var out string
-			var execErr error
-			if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-				out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-			} else {
-				// For mock executors in tests
-				out, execErr = smbClientExec.Execute(args)
-			}
-			return out, execErr
-		}) // nolint:errcheck
+		// We intentionally ignore the error here since the directory might already exist
+		// nolint:errcheck
+		_ = func() error {
+			_, err := executeWithRetry("Create parent directory", cfg, func() (string, error) {
+				var out string
+				var execErr error
+				if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+					out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+				} else {
+					// For mock executors in tests
+					out, execErr = smbClientExec.Execute(args)
+				}
+				return out, execErr
+			})
+			return err
+		}()
 	}
 
 	// Build the put command

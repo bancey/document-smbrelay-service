@@ -9,10 +9,10 @@ func TestLoadFromEnv_RetryConfiguration(t *testing.T) {
 	tests := []struct {
 		name                 string
 		envVars              map[string]string
-		expectedMaxRetries   int
 		expectedInitialDelay float64
 		expectedMaxDelay     float64
 		expectedBackoff      float64
+		expectedMaxRetries   int
 	}{
 		{
 			name: "Default retry values",
