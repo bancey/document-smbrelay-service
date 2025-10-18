@@ -9,30 +9,38 @@ import (
 )
 
 const (
-	defaultPortStr        = "445"
-	defaultPort           = 445
-	trueValue             = "true"
-	oneValue              = "1"
-	yesValue              = "yes"
-	authProtocolNTLM      = "ntlm"
-	authProtocolNegotiate = "negotiate"
-	authProtocolKerberos  = "kerberos"
+	defaultPortStr           = "445"
+	defaultPort              = 445
+	defaultMaxRetries        = 3
+	defaultInitialRetryDelay = 1.0  // seconds
+	defaultMaxRetryDelay     = 30.0 // seconds
+	defaultRetryBackoff      = 2.0  // exponential backoff multiplier
+	trueValue                = "true"
+	oneValue                 = "1"
+	yesValue                 = "yes"
+	authProtocolNTLM         = "ntlm"
+	authProtocolNegotiate    = "negotiate"
+	authProtocolKerberos     = "kerberos"
 )
 
 // SMBConfig holds the SMB server configuration
 // Fields are ordered for optimal memory alignment
 type SMBConfig struct {
-	ServerName     string
-	ServerIP       string
-	ShareName      string
-	BasePath       string // Base path within the share (e.g., "apps/myapp")
-	Username       string
-	Password       string
-	Domain         string
-	AuthProtocol   string
-	Port           int
-	UseNTLMv2      bool
-	LogSmbCommands bool
+	ServerName        string
+	ServerIP          string
+	ShareName         string
+	BasePath          string // Base path within the share (e.g., "apps/myapp")
+	Username          string
+	Password          string
+	Domain            string
+	AuthProtocol      string
+	Port              int
+	MaxRetries        int     // Maximum number of retry attempts for network errors (default: 3)
+	InitialRetryDelay float64 // Initial delay in seconds before first retry (default: 1.0)
+	MaxRetryDelay     float64 // Maximum delay in seconds between retries (default: 30.0)
+	RetryBackoff      float64 // Backoff multiplier for exponential backoff (default: 2.0)
+	UseNTLMv2         bool
+	LogSmbCommands    bool
 }
 
 // parseBoolEnv parses a boolean environment variable
@@ -74,6 +82,40 @@ func getAuthProtocol(useNTLMv2 bool) string {
 	return authProtocol
 }
 
+// getIntEnv gets an integer from environment variable with a default value
+func getIntEnv(key string, defaultValue int) int {
+	valStr := os.Getenv(key)
+	if valStr == "" {
+		return defaultValue
+	}
+	val, err := strconv.Atoi(valStr)
+	if err != nil {
+		return defaultValue
+	}
+	// Ensure non-negative values
+	if val < 0 {
+		return defaultValue
+	}
+	return val
+}
+
+// getFloatEnv gets a float64 from environment variable with a default value
+func getFloatEnv(key string, defaultValue float64) float64 {
+	valStr := os.Getenv(key)
+	if valStr == "" {
+		return defaultValue
+	}
+	val, err := strconv.ParseFloat(valStr, 64)
+	if err != nil {
+		return defaultValue
+	}
+	// Ensure non-negative values
+	if val < 0 {
+		return defaultValue
+	}
+	return val
+}
+
 // LoadFromEnv loads SMB configuration from environment variables
 // Returns the config and a list of missing required variables
 func LoadFromEnv() (*SMBConfig, []string) {
@@ -103,18 +145,28 @@ func LoadFromEnv() (*SMBConfig, []string) {
 	// Auth protocol: negotiate, ntlm, or kerberos
 	authProtocol := getAuthProtocol(useNTLMv2)
 
+	// Retry configuration
+	maxRetries := getIntEnv("SMB_MAX_RETRIES", defaultMaxRetries)
+	initialRetryDelay := getFloatEnv("SMB_RETRY_INITIAL_DELAY", defaultInitialRetryDelay)
+	maxRetryDelay := getFloatEnv("SMB_RETRY_MAX_DELAY", defaultMaxRetryDelay)
+	retryBackoff := getFloatEnv("SMB_RETRY_BACKOFF", defaultRetryBackoff)
+
 	config := &SMBConfig{
-		ServerName:     serverName,
-		ServerIP:       serverIP,
-		ShareName:      shareName,
-		BasePath:       basePath,
-		Username:       username,
-		Password:       password,
-		Domain:         domain,
-		Port:           port,
-		UseNTLMv2:      useNTLMv2,
-		AuthProtocol:   authProtocol,
-		LogSmbCommands: logSmbCommands,
+		ServerName:        serverName,
+		ServerIP:          serverIP,
+		ShareName:         shareName,
+		BasePath:          basePath,
+		Username:          username,
+		Password:          password,
+		Domain:            domain,
+		Port:              port,
+		UseNTLMv2:         useNTLMv2,
+		AuthProtocol:      authProtocol,
+		LogSmbCommands:    logSmbCommands,
+		MaxRetries:        maxRetries,
+		InitialRetryDelay: initialRetryDelay,
+		MaxRetryDelay:     maxRetryDelay,
+		RetryBackoff:      retryBackoff,
 	}
 
 	// Check required fields

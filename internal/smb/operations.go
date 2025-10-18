@@ -84,13 +84,19 @@ func ListFiles(remotePath string, cfg *config.SMBConfig) ([]FileInfo, error) {
 		return nil, err
 	}
 
-	var output string
-	if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-		output, err = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-	} else {
-		// For mock executors in tests
-		output, err = smbClientExec.Execute(args)
-	}
+	// Execute with retry logic
+	output, err := executeWithRetry("List files", cfg, func() (string, error) {
+		var out string
+		var execErr error
+		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+			out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+		} else {
+			// For mock executors in tests
+			out, execErr = smbClientExec.Execute(args)
+		}
+		return out, execErr
+	})
+
 	if err != nil {
 		// Parse error messages
 		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||
@@ -181,13 +187,19 @@ func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, over
 			return err
 		}
 
-		var output string
-		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-			output, err = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-		} else {
-			// For mock executors in tests
-			output, err = smbClientExec.Execute(args)
-		}
+		// Execute with retry logic
+		output, err := executeWithRetry("Check file existence", cfg, func() (string, error) {
+			var out string
+			var execErr error
+			if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+				out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+			} else {
+				// For mock executors in tests
+				out, execErr = smbClientExec.Execute(args)
+			}
+			return out, execErr
+		})
+
 		// If the file is found in the output, it exists
 		// Note: We ignore the error here as the command may fail if file doesn't exist
 		if err == nil && (strings.Contains(output, fullPath) || strings.Contains(output, "blocks of size")) {
@@ -219,13 +231,19 @@ func DeleteFile(remotePath string, cfg *config.SMBConfig) error {
 		return err
 	}
 
-	var output string
-	if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-		output, err = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-	} else {
-		// For mock executors in tests
-		output, err = smbClientExec.Execute(args)
-	}
+	// Execute with retry logic
+	output, err := executeWithRetry("Delete file", cfg, func() (string, error) {
+		var out string
+		var execErr error
+		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+			out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+		} else {
+			// For mock executors in tests
+			out, execErr = smbClientExec.Execute(args)
+		}
+		return out, execErr
+	})
+
 	if err != nil {
 		// Parse error messages
 		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||
