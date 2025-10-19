@@ -184,6 +184,16 @@ func (e *DefaultSmbClientExecutor) ExecuteWithEnvAndLogging(
 // Global executor that can be replaced in tests
 var smbClientExec ClientExecutor = &DefaultSmbClientExecutor{}
 
+// executeSmbClient is a helper function that executes smbclient with proper logging support
+// This reduces code duplication across all executeWithRetry calls
+func executeSmbClient(args []string, env map[string]string, cfg *config.SMBConfig) (string, error) {
+	if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
+		return executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
+	}
+	// For mock executors in tests
+	return smbClientExec.Execute(args)
+}
+
 // buildSmbClientArgs constructs the arguments for smbclient command
 // Returns args and environment variables map
 func buildSmbClientArgs(cfg *config.SMBConfig, command string) ([]string, map[string]string, error) {
@@ -256,15 +266,7 @@ func testConnection(cfg *config.SMBConfig) error {
 
 	// Execute with retry logic
 	output, err := executeWithRetry("SMB connection test", cfg, func() (string, error) {
-		var out string
-		var execErr error
-		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-			out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-		} else {
-			// For mock executors in tests
-			out, execErr = smbClientExec.Execute(args)
-		}
-		return out, execErr
+		return executeSmbClient(args, env, cfg)
 	})
 
 	if err != nil {
@@ -310,15 +312,7 @@ func testBasePath(cfg *config.SMBConfig) error {
 
 	// Execute with retry logic
 	output, err := executeWithRetry("Base path validation", cfg, func() (string, error) {
-		var out string
-		var execErr error
-		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-			out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-		} else {
-			// For mock executors in tests
-			out, execErr = smbClientExec.Execute(args)
-		}
-		return out, execErr
+		return executeSmbClient(args, env, cfg)
 	})
 
 	if err != nil {
@@ -364,15 +358,7 @@ func uploadFileViaSmbClient(localPath string, remotePath string, cfg *config.SMB
 		// nolint:errcheck
 		_ = func() error {
 			_, err := executeWithRetry("Create parent directory", cfg, func() (string, error) {
-				var out string
-				var execErr error
-				if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-					out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-				} else {
-					// For mock executors in tests
-					out, execErr = smbClientExec.Execute(args)
-				}
-				return out, execErr
+				return executeSmbClient(args, env, cfg)
 			})
 			return err
 		}()
@@ -393,15 +379,7 @@ func uploadFileViaSmbClient(localPath string, remotePath string, cfg *config.SMB
 
 	// Execute with retry logic
 	output, err := executeWithRetry("Upload file", cfg, func() (string, error) {
-		var out string
-		var execErr error
-		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-			out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-		} else {
-			// For mock executors in tests
-			out, execErr = smbClientExec.Execute(args)
-		}
-		return out, execErr
+		return executeSmbClient(args, env, cfg)
 	})
 
 	if err != nil {

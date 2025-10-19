@@ -86,15 +86,7 @@ func ListFiles(remotePath string, cfg *config.SMBConfig) ([]FileInfo, error) {
 
 	// Execute with retry logic
 	output, err := executeWithRetry("List files", cfg, func() (string, error) {
-		var out string
-		var execErr error
-		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-			out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-		} else {
-			// For mock executors in tests
-			out, execErr = smbClientExec.Execute(args)
-		}
-		return out, execErr
+		return executeSmbClient(args, env, cfg)
 	})
 
 	if err != nil {
@@ -189,15 +181,7 @@ func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, over
 
 		// Execute with retry logic
 		output, err := executeWithRetry("Check file existence", cfg, func() (string, error) {
-			var out string
-			var execErr error
-			if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-				out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-			} else {
-				// For mock executors in tests
-				out, execErr = smbClientExec.Execute(args)
-			}
-			return out, execErr
+			return executeSmbClient(args, env, cfg)
 		})
 
 		// If the file is found in the output, it exists
@@ -233,15 +217,7 @@ func DeleteFile(remotePath string, cfg *config.SMBConfig) error {
 
 	// Execute with retry logic
 	output, err := executeWithRetry("Delete file", cfg, func() (string, error) {
-		var out string
-		var execErr error
-		if executor, ok := smbClientExec.(*DefaultSmbClientExecutor); ok {
-			out, execErr = executor.ExecuteWithEnvAndLogging(args, env, cfg.LogSmbCommands)
-		} else {
-			// For mock executors in tests
-			out, execErr = smbClientExec.Execute(args)
-		}
-		return out, execErr
+		return executeSmbClient(args, env, cfg)
 	})
 
 	if err != nil {
