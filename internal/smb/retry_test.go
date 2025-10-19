@@ -26,13 +26,40 @@ func createTestRetryConfig(maxRetries int) *config.SMBConfig {
 	}
 }
 
-func TestIsRetryableError_ConnectionRefused(t *testing.T) {
+// Helper function to assert error expectations
+func assertError(t *testing.T, err error, shouldError bool, msg string) {
+	t.Helper()
+	if shouldError && err == nil {
+		t.Errorf("%s: expected error, got nil", msg)
+	} else if !shouldError && err != nil {
+		t.Errorf("%s: expected no error, got: %v", msg, err)
+	}
+}
+
+// Helper function to assert output expectations
+func assertOutput(t *testing.T, got, want string, msg string) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s: got output %q, want %q", msg, got, want)
+	}
+}
+
+// Helper function to assert call count
+func assertCallCount(t *testing.T, got, want int, msg string) {
+	t.Helper()
+	if got != want {
+		t.Errorf("%s: function called %d times, want %d times", msg, got, want)
+	}
+}
+
+func TestIsRetryableError(t *testing.T) {
 	tests := []struct {
 		name     string
 		err      error
 		output   string
 		expected bool
 	}{
+		// Retryable errors
 		{
 			name:     "Connection refused in error",
 			err:      errors.New("connection refused"),
@@ -63,25 +90,7 @@ func TestIsRetryableError_ConnectionRefused(t *testing.T) {
 			output:   "NT_STATUS_IO_TIMEOUT",
 			expected: true,
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isRetryableError(tt.err, tt.output)
-			if result != tt.expected {
-				t.Errorf("isRetryableError() = %v, want %v", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestIsRetryableError_NonRetryable(t *testing.T) {
-	tests := []struct {
-		name     string
-		err      error
-		output   string
-		expected bool
-	}{
+		// Non-retryable errors
 		{
 			name:     "Authentication failure",
 			err:      errors.New("command failed"),
@@ -184,15 +193,9 @@ func TestExecuteWithRetry_Success(t *testing.T) {
 
 	output, err := executeWithRetry("test operation", cfg, fn)
 
-	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
-	}
-	if output != testOutputSuccess {
-		t.Errorf("Expected output 'success', got: %s", output)
-	}
-	if callCount != 1 {
-		t.Errorf("Expected function to be called once, called %d times", callCount)
-	}
+	assertError(t, err, false, "Success case")
+	assertOutput(t, output, testOutputSuccess, "Success case")
+	assertCallCount(t, callCount, 1, "Success case")
 }
 
 func TestExecuteWithRetry_TransientErrorThenSuccess(t *testing.T) {
@@ -211,15 +214,9 @@ func TestExecuteWithRetry_TransientErrorThenSuccess(t *testing.T) {
 	output, err := executeWithRetry("test operation", cfg, fn)
 	elapsed := time.Since(start)
 
-	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
-	}
-	if output != testOutputSuccess {
-		t.Errorf("Expected output 'success', got: %s", output)
-	}
-	if callCount != 3 {
-		t.Errorf("Expected function to be called 3 times, called %d times", callCount)
-	}
+	assertError(t, err, false, "Transient error then success")
+	assertOutput(t, output, testOutputSuccess, "Transient error then success")
+	assertCallCount(t, callCount, 3, "Transient error then success")
 	// Should have at least 2 delays (0.01s + 0.02s = 0.03s minimum)
 	if elapsed < 30*time.Millisecond {
 		t.Errorf("Expected at least 30ms elapsed for retries, got %v", elapsed)
@@ -237,15 +234,9 @@ func TestExecuteWithRetry_NonRetryableError(t *testing.T) {
 
 	output, err := executeWithRetry("test operation", cfg, fn)
 
-	if err == nil {
-		t.Error("Expected error, got nil")
-	}
-	if output != testStatusAccessDenied {
-		t.Errorf("Expected output 'NT_STATUS_ACCESS_DENIED', got: %s", output)
-	}
-	if callCount != 1 {
-		t.Errorf("Expected function to be called once (no retries for non-retryable errors), called %d times", callCount)
-	}
+	assertError(t, err, true, "Non-retryable error")
+	assertOutput(t, output, testStatusAccessDenied, "Non-retryable error")
+	assertCallCount(t, callCount, 1, "Non-retryable error (no retries)")
 }
 
 func TestExecuteWithRetry_MaxRetriesExceeded(t *testing.T) {
@@ -259,16 +250,9 @@ func TestExecuteWithRetry_MaxRetriesExceeded(t *testing.T) {
 
 	output, err := executeWithRetry("test operation", cfg, fn)
 
-	if err == nil {
-		t.Error("Expected error, got nil")
-	}
-	if output != testOutputConnectionRefused {
-		t.Errorf("Expected output 'Connection refused', got: %s", output)
-	}
-	// Should be called 3 times: initial + 2 retries
-	if callCount != 3 {
-		t.Errorf("Expected function to be called 3 times (initial + 2 retries), called %d times", callCount)
-	}
+	assertError(t, err, true, "Max retries exceeded")
+	assertOutput(t, output, testOutputConnectionRefused, "Max retries exceeded")
+	assertCallCount(t, callCount, 3, "Max retries exceeded (initial + 2 retries)")
 }
 
 func TestExecuteWithRetry_ZeroRetries(t *testing.T) {
@@ -282,16 +266,9 @@ func TestExecuteWithRetry_ZeroRetries(t *testing.T) {
 
 	output, err := executeWithRetry("test operation", cfg, fn)
 
-	if err == nil {
-		t.Error("Expected error, got nil")
-	}
-	if output != testOutputConnectionRefused {
-		t.Errorf("Expected output 'Connection refused', got: %s", output)
-	}
-	// Should be called only once with no retries
-	if callCount != 1 {
-		t.Errorf("Expected function to be called once (no retries), called %d times", callCount)
-	}
+	assertError(t, err, true, "Zero retries")
+	assertOutput(t, output, testOutputConnectionRefused, "Zero retries")
+	assertCallCount(t, callCount, 1, "Zero retries (no retries)")
 }
 
 // Test integration with mock executor
