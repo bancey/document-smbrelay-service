@@ -54,8 +54,8 @@ func ListHandler(c *fiber.Ctx) error {
 	// Get path from query parameter (default to root)
 	path := c.Query("path", "")
 
-	// List files
-	files, err := smb.ListFiles(path, cfg)
+	// List files with context
+	files, err := smb.ListFilesWithContext(c.UserContext(), path, cfg)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -125,8 +125,8 @@ func UploadHandler(c *fiber.Ctx) error {
 		}
 	}()
 
-	// Upload to SMB share
-	err = smb.UploadFile(tmpPath, remotePath, cfg, overwrite)
+	// Upload to SMB share with context
+	err = smb.UploadFileWithContext(c.UserContext(), tmpPath, remotePath, cfg, overwrite)
 	if err != nil {
 		// Check if it's a file exists error
 		if strings.Contains(err.Error(), "already exists") {
@@ -165,8 +165,8 @@ func DeleteHandler(c *fiber.Ctx) error {
 		})
 	}
 
-	// Delete file from SMB share
-	err := smb.DeleteFile(remotePath, cfg)
+	// Delete file from SMB share with context
+	err := smb.DeleteFileWithContext(c.UserContext(), remotePath, cfg)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{

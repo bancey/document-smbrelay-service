@@ -12,6 +12,7 @@ A high-performance HTTP service built with Go that accepts file uploads and writ
 - **📚 OpenAPI Documentation**: Interactive Swagger UI at `/docs`
 - **🐳 Docker Support**: Multi-stage builds for minimal image size (~30MB)
 - **🔐 Flexible Authentication**: Supports NTLM, Negotiate, and Kerberos protocols
+- **📊 OpenTelemetry Integration**: Full observability with traces, metrics, and Azure Application Insights support
 
 ## Quick Start
 
@@ -125,6 +126,38 @@ export SMB_RETRY_INITIAL_DELAY=2.0    # Start with 2 second delay
 export SMB_RETRY_MAX_DELAY=60.0       # Cap delays at 60 seconds
 export SMB_RETRY_BACKOFF=2.0          # Double delay each retry (2s, 4s, 8s, 16s, 32s, 60s)
 ```
+
+#### OpenTelemetry / Observability
+
+The service includes comprehensive OpenTelemetry instrumentation for distributed tracing, metrics, and logging:
+
+- `OTEL_ENABLED`: Enable OpenTelemetry instrumentation - `true|false` (default: `false`)
+- `OTEL_SERVICE_NAME`: Service name for telemetry (default: `document-smbrelay-service`)
+- `OTEL_SERVICE_VERSION`: Service version (default: `1.0.0`)
+- `OTEL_TRACING_ENABLED`: Enable distributed tracing - `true|false` (default: `true` if `OTEL_ENABLED`)
+- `OTEL_METRICS_ENABLED`: Enable metrics collection - `true|false` (default: `true` if `OTEL_ENABLED`)
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP endpoint for traces and metrics (e.g., `localhost:4318`)
+- `OTEL_EXPORTER_OTLP_HEADERS`: Additional headers for OTLP requests (format: `key1=value1,key2=value2`)
+- `APPLICATIONINSIGHTS_CONNECTION_STRING`: Azure Application Insights connection string (automatically enables OpenTelemetry)
+
+**Example with Azure Application Insights:**
+```bash
+export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=xxx;IngestionEndpoint=https://xxx.applicationinsights.azure.com"
+```
+
+**Example with generic OTLP backend:**
+```bash
+export OTEL_ENABLED=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4318
+export OTEL_SERVICE_NAME=my-smbrelay
+```
+
+See [docs/OPENTELEMETRY.md](docs/OPENTELEMETRY.md) for complete OpenTelemetry documentation including:
+- Detailed configuration options
+- Azure Application Insights integration
+- Supported OTLP backends (Jaeger, Grafana, etc.)
+- Metrics and traces collected
+- Usage examples and troubleshooting
 
 ## Authentication Methods
 
