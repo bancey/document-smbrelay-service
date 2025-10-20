@@ -76,7 +76,7 @@ func ListFiles(remotePath string, cfg *config.SMBConfig) ([]FileInfo, error) {
 // ListFilesWithContext lists files and folders at the given path on the SMB share with context
 func ListFilesWithContext(ctx context.Context, remotePath string, cfg *config.SMBConfig) ([]FileInfo, error) {
 	startTime := time.Now()
-	
+
 	// Start telemetry span
 	ctx, span := telemetry.StartSMBSpan(ctx, "list",
 		attribute.String("smb.path", remotePath),
@@ -84,7 +84,7 @@ func ListFilesWithContext(ctx context.Context, remotePath string, cfg *config.SM
 		attribute.String("smb.share", cfg.ShareName),
 	)
 	defer span.End()
-	
+
 	// Build full path including base path
 	fullPath := buildFullPath(remotePath, cfg)
 
@@ -112,7 +112,7 @@ func ListFilesWithContext(ctx context.Context, remotePath string, cfg *config.SM
 	// Record metrics
 	duration := float64(time.Since(startTime).Milliseconds())
 	telemetry.RecordSMBOperation(ctx, "list", duration, err)
-	
+
 	if err != nil {
 		// Parse error messages
 		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||
@@ -133,11 +133,11 @@ func ListFilesWithContext(ctx context.Context, remotePath string, cfg *config.SM
 
 	// Parse the output
 	files := parseLsOutput(output)
-	
+
 	// Add file count to span
 	telemetry.AddSpanAttributes(span, attribute.Int("smb.file_count", len(files)))
 	telemetry.EndSpanWithError(span, nil)
-	
+
 	return files, nil
 }
 
@@ -205,7 +205,7 @@ func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, over
 // UploadFileWithContext uploads a local file to the SMB share using smbclient with context
 func UploadFileWithContext(ctx context.Context, localPath string, remotePath string, cfg *config.SMBConfig, overwrite bool) error {
 	startTime := time.Now()
-	
+
 	// Start telemetry span
 	ctx, span := telemetry.StartSMBSpan(ctx, "upload",
 		attribute.String("smb.path", remotePath),
@@ -215,7 +215,7 @@ func UploadFileWithContext(ctx context.Context, localPath string, remotePath str
 		attribute.Bool("smb.overwrite", overwrite),
 	)
 	defer span.End()
-	
+
 	// Build full path including base path
 	fullPath := buildFullPath(remotePath, cfg)
 
@@ -246,12 +246,12 @@ func UploadFileWithContext(ctx context.Context, localPath string, remotePath str
 
 	// Upload the file
 	uploadErr := uploadFileViaSmbClient(localPath, fullPath, cfg)
-	
+
 	// Record metrics
 	duration := float64(time.Since(startTime).Milliseconds())
 	telemetry.RecordSMBOperation(ctx, "upload", duration, uploadErr)
 	telemetry.EndSpanWithError(span, uploadErr)
-	
+
 	return uploadErr
 }
 
@@ -263,7 +263,7 @@ func DeleteFile(remotePath string, cfg *config.SMBConfig) error {
 // DeleteFileWithContext deletes a file from the SMB share using smbclient with context
 func DeleteFileWithContext(ctx context.Context, remotePath string, cfg *config.SMBConfig) error {
 	startTime := time.Now()
-	
+
 	// Start telemetry span
 	ctx, span := telemetry.StartSMBSpan(ctx, "delete",
 		attribute.String("smb.path", remotePath),
@@ -271,7 +271,7 @@ func DeleteFileWithContext(ctx context.Context, remotePath string, cfg *config.S
 		attribute.String("smb.share", cfg.ShareName),
 	)
 	defer span.End()
-	
+
 	// Build full path including base path
 	fullPath := buildFullPath(remotePath, cfg)
 
@@ -298,7 +298,7 @@ func DeleteFileWithContext(ctx context.Context, remotePath string, cfg *config.S
 	// Record metrics
 	duration := float64(time.Since(startTime).Milliseconds())
 	telemetry.RecordSMBOperation(ctx, "delete", duration, err)
-	
+
 	if err != nil {
 		// Parse error messages
 		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||

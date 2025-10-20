@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Middleware returns a Fiber middleware that instruments HTTP requests with OpenTelemetry
@@ -95,7 +95,7 @@ func Middleware(serviceName string) fiber.Handler {
 		// Record metrics
 		httpRequestDuration.Record(ctx, float64(duration), metric.WithAttributes(attrs...))
 		httpRequestsTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
-		
+
 		// Record request/response sizes
 		requestSize := len(c.Request().Body())
 		responseSize := len(c.Response().Body())

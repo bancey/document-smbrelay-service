@@ -43,7 +43,7 @@ func LoadConfig() *Config {
 	}
 
 	otlpEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-	
+
 	// Parse OTLP headers from environment variable
 	// Format: key1=value1,key2=value2
 	headersStr := os.Getenv("OTEL_EXPORTER_OTLP_HEADERS")

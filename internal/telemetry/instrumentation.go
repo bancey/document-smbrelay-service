@@ -32,7 +32,7 @@ func init() {
 
 	// Initialize metrics
 	var err error
-	
+
 	smbOperationDuration, err = meter.Float64Histogram(
 		"smb.operation.duration",
 		metric.WithDescription("Duration of SMB operations"),

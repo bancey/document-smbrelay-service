@@ -57,7 +57,7 @@ func main() {
 
 	// Middleware
 	app.Use(recover.New())
-	
+
 	// Add OpenTelemetry middleware if enabled
 	if telemetryConfig.Enabled {
 		app.Use(telemetry.Middleware(telemetryConfig.ServiceName))

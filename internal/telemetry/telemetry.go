@@ -93,16 +93,16 @@ func initTracing(ctx context.Context, cfg *Config, res *resource.Resource) (*sdk
 	if cfg.OTLPEndpoint != "" {
 		// Use OTLP exporter (for Azure Application Insights or other OTLP backends)
 		logger.Info("Configuring OTLP trace exporter: %s", cfg.OTLPEndpoint)
-		
+
 		opts := []otlptracehttp.Option{
 			otlptracehttp.WithEndpoint(cfg.OTLPEndpoint),
 		}
-		
+
 		// Add headers if provided
 		if len(cfg.OTLPHeaders) > 0 {
 			opts = append(opts, otlptracehttp.WithHeaders(cfg.OTLPHeaders))
 		}
-		
+
 		// If using Azure Application Insights connection string
 		if cfg.AzureAppInsightsConnectionString != "" {
 			logger.Info("Configuring for Azure Application Insights")
@@ -150,16 +150,16 @@ func initMetrics(ctx context.Context, cfg *Config, res *resource.Resource) (*sdk
 	if cfg.OTLPEndpoint != "" {
 		// Use OTLP exporter
 		logger.Info("Configuring OTLP metric exporter: %s", cfg.OTLPEndpoint)
-		
+
 		opts := []otlpmetrichttp.Option{
 			otlpmetrichttp.WithEndpoint(cfg.OTLPEndpoint),
 		}
-		
+
 		// Add headers if provided
 		if len(cfg.OTLPHeaders) > 0 {
 			opts = append(opts, otlpmetrichttp.WithHeaders(cfg.OTLPHeaders))
 		}
-		
+
 		// If using Azure Application Insights
 		if cfg.AzureAppInsightsConnectionString != "" {
 			instrumentationKey := extractInstrumentationKey(cfg.AzureAppInsightsConnectionString)

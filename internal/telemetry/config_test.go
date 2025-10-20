@@ -12,7 +12,7 @@ func TestLoadConfig(t *testing.T) {
 		expected *Config
 	}{
 		{
-			name: "disabled by default",
+			name:    "disabled by default",
 			envVars: map[string]string{},
 			expected: &Config{
 				ServiceName:    "document-smbrelay-service",
@@ -38,8 +38,8 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "custom service name and version",
 			envVars: map[string]string{
-				"OTEL_ENABLED":        "true",
-				"OTEL_SERVICE_NAME":   "my-service",
+				"OTEL_ENABLED":         "true",
+				"OTEL_SERVICE_NAME":    "my-service",
 				"OTEL_SERVICE_VERSION": "2.0.0",
 			},
 			expected: &Config{
@@ -53,7 +53,7 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "OTLP endpoint configured",
 			envVars: map[string]string{
-				"OTEL_ENABLED":                 "true",
+				"OTEL_ENABLED":                "true",
 				"OTEL_EXPORTER_OTLP_ENDPOINT": "localhost:4318",
 			},
 			expected: &Config{
@@ -83,7 +83,7 @@ func TestLoadConfig(t *testing.T) {
 		{
 			name: "tracing disabled",
 			envVars: map[string]string{
-				"OTEL_ENABLED":          "true",
+				"OTEL_ENABLED":         "true",
 				"OTEL_TRACING_ENABLED": "false",
 			},
 			expected: &Config{
