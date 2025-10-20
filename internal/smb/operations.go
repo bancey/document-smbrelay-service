@@ -1,13 +1,18 @@
 package smb
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/bancey/document-smbrelay-service/internal/config"
+	"github.com/bancey/document-smbrelay-service/internal/telemetry"
 )
 
 // normalizePathSegment normalizes a single path segment by:
@@ -65,6 +70,21 @@ type FileInfo struct {
 
 // ListFiles lists files and folders at the given path on the SMB share
 func ListFiles(remotePath string, cfg *config.SMBConfig) ([]FileInfo, error) {
+	return ListFilesWithContext(context.Background(), remotePath, cfg)
+}
+
+// ListFilesWithContext lists files and folders at the given path on the SMB share with context
+func ListFilesWithContext(ctx context.Context, remotePath string, cfg *config.SMBConfig) ([]FileInfo, error) {
+	startTime := time.Now()
+
+	// Start telemetry span
+	ctx, span := telemetry.StartSMBSpan(ctx, "list",
+		attribute.String("smb.path", remotePath),
+		attribute.String("smb.server", cfg.ServerName),
+		attribute.String("smb.share", cfg.ShareName),
+	)
+	defer span.End()
+
 	// Build full path including base path
 	fullPath := buildFullPath(remotePath, cfg)
 
@@ -89,20 +109,36 @@ func ListFiles(remotePath string, cfg *config.SMBConfig) ([]FileInfo, error) {
 		return executeSmbClient(args, env, cfg)
 	})
 
+	// Record metrics
+	duration := float64(time.Since(startTime).Milliseconds())
+	telemetry.RecordSMBOperation(ctx, "list", duration, err)
+
 	if err != nil {
 		// Parse error messages
 		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||
 			strings.Contains(output, "NT_STATUS_OBJECT_PATH_NOT_FOUND") {
-			return nil, fmt.Errorf("path not found: %s", remotePath)
+			err = fmt.Errorf("path not found: %s", remotePath)
+			telemetry.EndSpanWithError(span, err)
+			return nil, err
 		}
 		if strings.Contains(output, "NT_STATUS_ACCESS_DENIED") {
-			return nil, fmt.Errorf("access denied to path: %s", remotePath)
+			err = fmt.Errorf("access denied to path: %s", remotePath)
+			telemetry.EndSpanWithError(span, err)
+			return nil, err
 		}
-		return nil, fmt.Errorf("failed to list files: %w", err)
+		err = fmt.Errorf("failed to list files: %w", err)
+		telemetry.EndSpanWithError(span, err)
+		return nil, err
 	}
 
 	// Parse the output
-	return parseLsOutput(output), nil
+	files := parseLsOutput(output)
+
+	// Add file count to span
+	telemetry.AddSpanAttributes(span, attribute.Int("smb.file_count", len(files)))
+	telemetry.EndSpanWithError(span, nil)
+
+	return files, nil
 }
 
 // parseLsOutput parses the output from smbclient ls command
@@ -163,6 +199,29 @@ func parseLsOutput(output string) []FileInfo {
 
 // UploadFile uploads a local file to the SMB share using smbclient
 func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, overwrite bool) error {
+	return UploadFileWithContext(context.Background(), localPath, remotePath, cfg, overwrite)
+}
+
+// UploadFileWithContext uploads a local file to the SMB share using smbclient with context
+func UploadFileWithContext(
+	ctx context.Context,
+	localPath string,
+	remotePath string,
+	cfg *config.SMBConfig,
+	overwrite bool,
+) error {
+	startTime := time.Now()
+
+	// Start telemetry span
+	ctx, span := telemetry.StartSMBSpan(ctx, "upload",
+		attribute.String("smb.path", remotePath),
+		attribute.String("smb.local_path", localPath),
+		attribute.String("smb.server", cfg.ServerName),
+		attribute.String("smb.share", cfg.ShareName),
+		attribute.Bool("smb.overwrite", overwrite),
+	)
+	defer span.End()
+
 	// Build full path including base path
 	fullPath := buildFullPath(remotePath, cfg)
 
@@ -192,11 +251,33 @@ func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, over
 	}
 
 	// Upload the file
-	return uploadFileViaSmbClient(localPath, fullPath, cfg)
+	uploadErr := uploadFileViaSmbClient(localPath, fullPath, cfg)
+
+	// Record metrics
+	duration := float64(time.Since(startTime).Milliseconds())
+	telemetry.RecordSMBOperation(ctx, "upload", duration, uploadErr)
+	telemetry.EndSpanWithError(span, uploadErr)
+
+	return uploadErr
 }
 
 // DeleteFile deletes a file from the SMB share using smbclient
 func DeleteFile(remotePath string, cfg *config.SMBConfig) error {
+	return DeleteFileWithContext(context.Background(), remotePath, cfg)
+}
+
+// DeleteFileWithContext deletes a file from the SMB share using smbclient with context
+func DeleteFileWithContext(ctx context.Context, remotePath string, cfg *config.SMBConfig) error {
+	startTime := time.Now()
+
+	// Start telemetry span
+	ctx, span := telemetry.StartSMBSpan(ctx, "delete",
+		attribute.String("smb.path", remotePath),
+		attribute.String("smb.server", cfg.ServerName),
+		attribute.String("smb.share", cfg.ShareName),
+	)
+	defer span.End()
+
 	// Build full path including base path
 	fullPath := buildFullPath(remotePath, cfg)
 
@@ -220,20 +301,33 @@ func DeleteFile(remotePath string, cfg *config.SMBConfig) error {
 		return executeSmbClient(args, env, cfg)
 	})
 
+	// Record metrics
+	duration := float64(time.Since(startTime).Milliseconds())
+	telemetry.RecordSMBOperation(ctx, "delete", duration, err)
+
 	if err != nil {
 		// Parse error messages
 		if strings.Contains(output, "NT_STATUS_OBJECT_NAME_NOT_FOUND") ||
 			strings.Contains(output, "NT_STATUS_OBJECT_PATH_NOT_FOUND") {
-			return fmt.Errorf("file not found: %s", remotePath)
+			err = fmt.Errorf("file not found: %s", remotePath)
+			telemetry.EndSpanWithError(span, err)
+			return err
 		}
 		if strings.Contains(output, "NT_STATUS_ACCESS_DENIED") {
-			return fmt.Errorf("access denied: cannot delete %s", remotePath)
+			err = fmt.Errorf("access denied: cannot delete %s", remotePath)
+			telemetry.EndSpanWithError(span, err)
+			return err
 		}
 		if strings.Contains(output, "NT_STATUS_FILE_IS_A_DIRECTORY") {
-			return fmt.Errorf("cannot delete directory: %s (use rmdir for directories)", remotePath)
+			err = fmt.Errorf("cannot delete directory: %s (use rmdir for directories)", remotePath)
+			telemetry.EndSpanWithError(span, err)
+			return err
 		}
-		return fmt.Errorf("failed to delete file: %w", err)
+		err = fmt.Errorf("failed to delete file: %w", err)
+		telemetry.EndSpanWithError(span, err)
+		return err
 	}
 
+	telemetry.EndSpanWithError(span, nil)
 	return nil
 }

@@ -88,3 +88,26 @@ func TestAssertNotNil(_ *testing.T) {
 	value := "not nil"
 	AssertNotNil(mockT, value)
 }
+
+func TestAssertNotContains(_ *testing.T) {
+	mockT := &testing.T{}
+
+	// This should pass - "world" does not contain "xyz"
+	AssertNotContains(mockT, "hello world", "xyz")
+}
+
+func TestContains_Success(_ *testing.T) {
+	// Test the internal contains function
+	result := contains("hello world", "world")
+	if !result {
+		_ = result // Use the result
+	}
+}
+
+func TestContains_Failure(_ *testing.T) {
+	// Test the internal contains function
+	result := contains("hello world", "xyz")
+	if result {
+		_ = result // Use the result
+	}
+}

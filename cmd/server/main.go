@@ -2,21 +2,42 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 
 	"github.com/bancey/document-smbrelay-service/internal/handlers"
 	"github.com/bancey/document-smbrelay-service/internal/logger"
+	"github.com/bancey/document-smbrelay-service/internal/telemetry"
 )
 
 func main() {
 	// Initialize logger
 	logger.Info("Starting Document SMB Relay Service")
+
+	// Initialize OpenTelemetry
+	ctx := context.Background()
+	telemetryConfig := telemetry.LoadConfig()
+	telemetryProvider, err := telemetry.Initialize(ctx, telemetryConfig)
+	if err != nil {
+		logger.Error("Failed to initialize telemetry: %v", err)
+		// Continue without telemetry rather than failing
+	}
+	defer func() {
+		if telemetryProvider != nil {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := telemetryProvider.Shutdown(shutdownCtx); err != nil {
+				logger.Error("Failed to shutdown telemetry: %v", err)
+			}
+		}
+	}()
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -36,6 +57,12 @@ func main() {
 
 	// Middleware
 	app.Use(recover.New())
+
+	// Add OpenTelemetry middleware if enabled
+	if telemetryConfig.Enabled {
+		app.Use(telemetry.Middleware(telemetryConfig.ServiceName))
+		logger.Info("OpenTelemetry middleware enabled")
+	}
 
 	// Routes
 	app.Get("/health", handlers.HealthHandler)
