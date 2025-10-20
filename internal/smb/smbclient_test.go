@@ -136,3 +136,75 @@ func TestExecuteWithEnv_EnvironmentVariables(t *testing.T) {
 		t.Errorf("Expected empty BinaryPath, got '%s'", executor.BinaryPath)
 	}
 }
+
+func TestSanitizeArgsForLogging(t *testing.T) {
+	tests := []struct {
+		env        map[string]string
+		args       []string
+		name       string
+		expectEnv  map[string]string
+		expectArgs []string
+	}{
+		{
+			name:       "password in -U flag",
+			args:       []string{"-U", "user%password123"},
+			expectArgs: []string{"-U", "user%***"},
+			env:        nil,
+			expectEnv:  map[string]string{},
+		},
+		{
+			name:       "username only in -U flag",
+			args:       []string{"-U", "username"},
+			expectArgs: []string{"-U", "username"},
+			env:        nil,
+			expectEnv:  map[string]string{},
+		},
+		{
+			name:       "password in environment",
+			args:       []string{"ls"},
+			expectArgs: []string{"ls"},
+			env:        map[string]string{"PASSWD": "secret", "USER": "testuser"},
+			expectEnv:  map[string]string{"PASSWD": "***", "USER": "testuser"},
+		},
+		{
+			name:       "multiple password variations",
+			args:       []string{"-U", "admin%P@ssw0rd!"},
+			expectArgs: []string{"-U", "admin%***"},
+			env:        map[string]string{"PASSWORD": "secret123", "API_KEY": "key123"},
+			expectEnv:  map[string]string{"PASSWORD": "***", "API_KEY": "key123"},
+		},
+		{
+			name:       "empty args and env",
+			args:       []string{},
+			expectArgs: []string{},
+			env:        map[string]string{},
+			expectEnv:  map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotArgs, gotEnv := sanitizeArgsForLogging(tt.args, tt.env)
+
+			// Check args
+			if len(gotArgs) != len(tt.expectArgs) {
+				t.Errorf("Expected %d args, got %d", len(tt.expectArgs), len(gotArgs))
+			}
+			for i := range gotArgs {
+				if i < len(tt.expectArgs) && gotArgs[i] != tt.expectArgs[i] {
+					t.Errorf("Arg %d: expected '%s', got '%s'", i, tt.expectArgs[i], gotArgs[i])
+				}
+			}
+
+			// Check env
+			if len(gotEnv) != len(tt.expectEnv) {
+				t.Errorf("Expected %d env vars, got %d", len(tt.expectEnv), len(gotEnv))
+			}
+			for k, v := range tt.expectEnv {
+				if gotEnv[k] != v {
+					t.Errorf("Env %s: expected '%s', got '%s'", k, v, gotEnv[k])
+				}
+			}
+		})
+	}
+}

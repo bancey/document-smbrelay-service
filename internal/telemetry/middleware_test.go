@@ -1,9 +1,11 @@
 package telemetry
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -98,7 +100,7 @@ func TestMiddleware_WithError(t *testing.T) {
 	app.Use(Middleware("test-service"))
 
 	// Add test route that returns error
-	app.Get("/error", func(c *fiber.Ctx) error {
+	app.Get("/error", func(_ *fiber.Ctx) error {
 		return fiber.NewError(500, "test error")
 	})
 
@@ -225,9 +227,9 @@ func TestMiddleware_DifferentStatusCodes(t *testing.T) {
 	defer provider.Shutdown(context.Background())
 
 	testCases := []struct {
+		handler    fiber.Handler
 		name       string
 		statusCode int
-		handler    fiber.Handler
 	}{
 		{
 			name:       "200 OK",
@@ -281,6 +283,129 @@ func TestMiddleware_DifferentStatusCodes(t *testing.T) {
 
 			if resp.StatusCode != tc.statusCode {
 				t.Errorf("Expected status %d, got %d", tc.statusCode, resp.StatusCode)
+			}
+		})
+	}
+}
+
+func TestMiddleware_WithTraceContext(t *testing.T) {
+	// Initialize telemetry
+	cfg := &Config{
+		Enabled:        true,
+		TracingEnabled: true,
+		MetricsEnabled: true,
+		ServiceName:    "test-service",
+		ServiceVersion: "1.0.0",
+	}
+	provider, err := Initialize(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Failed to initialize telemetry: %v", err)
+	}
+	defer provider.Shutdown(context.Background())
+
+	// Create Fiber app with middleware
+	app := fiber.New()
+	app.Use(Middleware("test-service"))
+
+	app.Get("/test", func(c *fiber.Ctx) error {
+		// Verify context has been set
+		if c.UserContext() == nil {
+			t.Error("Expected user context to be set")
+		}
+		return c.SendString("ok")
+	})
+
+	// Test with trace context headers
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to test request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestMiddleware_WithRequestBody(t *testing.T) {
+	// Initialize telemetry
+	cfg := &Config{
+		Enabled:        true,
+		TracingEnabled: true,
+		MetricsEnabled: true,
+		ServiceName:    "test-service",
+		ServiceVersion: "1.0.0",
+	}
+	provider, err := Initialize(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Failed to initialize telemetry: %v", err)
+	}
+	defer provider.Shutdown(context.Background())
+
+	// Create Fiber app with middleware
+	app := fiber.New()
+	app.Use(Middleware("test-service"))
+
+	app.Post("/test", func(c *fiber.Ctx) error {
+		body := c.Body()
+		return c.SendString("received: " + string(body))
+	})
+
+	// Test with request body
+	reqBody := []byte("test request body")
+	req := httptest.NewRequest("POST", "/test", bytes.NewReader(reqBody))
+	resp, err := app.Test(req)
+	if err != nil {
+		t.Fatalf("Failed to test request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if !strings.Contains(string(respBody), "received:") {
+		t.Errorf("Expected response to contain 'received:', got %s", string(respBody))
+	}
+}
+
+func TestMiddleware_DifferentHTTPMethods(t *testing.T) {
+	// Initialize telemetry
+	cfg := &Config{
+		Enabled:        true,
+		TracingEnabled: true,
+		MetricsEnabled: true,
+		ServiceName:    "test-service",
+		ServiceVersion: "1.0.0",
+	}
+	provider, err := Initialize(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Failed to initialize telemetry: %v", err)
+	}
+	defer provider.Shutdown(context.Background())
+
+	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH"}
+
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			app := fiber.New()
+			app.Use(Middleware("test-service"))
+			app.All("/test", func(c *fiber.Ctx) error {
+				return c.SendString("ok")
+			})
+
+			req := httptest.NewRequest(method, "/test", nil)
+			resp, err := app.Test(req)
+			if err != nil {
+				t.Fatalf("Failed to test request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != 200 {
+				t.Errorf("Expected status 200, got %d", resp.StatusCode)
 			}
 		})
 	}

@@ -216,7 +216,7 @@ func TestAddSpanEvent(t *testing.T) {
 	AddSpanEvent(span, eventName, attrs...)
 }
 
-func TestInstrumentation_WithNilMetrics(t *testing.T) {
+func TestInstrumentation_WithNilMetrics(_ *testing.T) {
 	// Test that functions handle nil metrics gracefully
 	// This simulates when metric creation fails
 	ctx := context.Background()

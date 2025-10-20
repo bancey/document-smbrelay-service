@@ -8,6 +8,8 @@ import (
 
 // Config holds the telemetry configuration
 type Config struct {
+	// OTLPHeaders are additional headers to send with OTLP requests (e.g., for authentication)
+	OTLPHeaders map[string]string
 	// ServiceName is the name of the service (defaults to "document-smbrelay-service")
 	ServiceName string
 	// ServiceVersion is the version of the service
@@ -16,8 +18,6 @@ type Config struct {
 	OTLPEndpoint string
 	// AzureAppInsightsConnectionString is the Application Insights connection string
 	AzureAppInsightsConnectionString string
-	// OTLPHeaders are additional headers to send with OTLP requests (e.g., for authentication)
-	OTLPHeaders map[string]string
 	// Enabled determines if telemetry is enabled
 	Enabled bool
 	// TracingEnabled determines if tracing is enabled

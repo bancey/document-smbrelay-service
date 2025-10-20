@@ -200,3 +200,152 @@ func TestLoadConfig_WithHeaders(t *testing.T) {
 		t.Errorf("Expected header key2=value2, got %s", cfg.OTLPHeaders["key2"])
 	}
 }
+
+func TestInitialize_WithOTLPEndpoint(t *testing.T) {
+	cfg := &Config{
+		Enabled:        true,
+		TracingEnabled: true,
+		MetricsEnabled: true,
+		ServiceName:    "test-service",
+		ServiceVersion: "1.0.0",
+		OTLPEndpoint:   "localhost:4318",
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	provider, err := Initialize(ctx, cfg)
+	// Note: This might fail to connect but should still initialize
+	if provider == nil {
+		t.Fatal("Initialize() should return non-nil provider")
+	}
+
+	// Clean up
+	if err == nil {
+		_ = provider.Shutdown(context.Background())
+	}
+}
+
+func TestInitialize_WithOTLPHeaders(t *testing.T) {
+	cfg := &Config{
+		Enabled:        true,
+		TracingEnabled: true,
+		MetricsEnabled: true,
+		ServiceName:    "test-service",
+		ServiceVersion: "1.0.0",
+		OTLPEndpoint:   "localhost:4318",
+		OTLPHeaders: map[string]string{
+			"x-api-key":     "test-key",
+			"custom-header": "custom-value",
+		},
+	}
+
+	ctx := context.Background()
+	provider, err := Initialize(ctx, cfg)
+
+	if provider == nil {
+		t.Fatal("Initialize() should return non-nil provider")
+	}
+
+	// Clean up
+	if err == nil {
+		_ = provider.Shutdown(context.Background())
+	}
+}
+
+func TestShutdown_OnlyTracer(t *testing.T) {
+	cfg := &Config{
+		Enabled:        true,
+		TracingEnabled: true,
+		MetricsEnabled: false,
+		ServiceName:    "test-service",
+		ServiceVersion: "1.0.0",
+	}
+
+	ctx := context.Background()
+	provider, err := Initialize(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Initialize() failed: %v", err)
+	}
+
+	// Test shutdown with only tracer provider
+	err = provider.Shutdown(ctx)
+	if err != nil {
+		t.Errorf("Shutdown() failed: %v", err)
+	}
+}
+
+func TestShutdown_OnlyMeter(t *testing.T) {
+	cfg := &Config{
+		Enabled:        true,
+		TracingEnabled: false,
+		MetricsEnabled: true,
+		ServiceName:    "test-service",
+		ServiceVersion: "1.0.0",
+	}
+
+	ctx := context.Background()
+	provider, err := Initialize(ctx, cfg)
+	if err != nil {
+		t.Fatalf("Initialize() failed: %v", err)
+	}
+
+	// Test shutdown with only meter provider
+	err = provider.Shutdown(ctx)
+	if err != nil {
+		t.Errorf("Shutdown() failed: %v", err)
+	}
+}
+
+func TestShutdown_NilProviders(t *testing.T) {
+	provider := &Provider{
+		config: &Config{
+			Enabled: true,
+		},
+		tracerProvider: nil,
+		meterProvider:  nil,
+	}
+
+	err := provider.Shutdown(context.Background())
+	if err != nil {
+		t.Errorf("Shutdown() should not error with nil providers: %v", err)
+	}
+}
+
+func TestExtractInstrumentationKey_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		connStr  string
+		expected string
+	}{
+		{
+			name:     "empty string",
+			connStr:  "",
+			expected: "",
+		},
+		{
+			name:     "key at end",
+			connStr:  "IngestionEndpoint=https://test.com;InstrumentationKey=end-key",
+			expected: "end-key",
+		},
+		{
+			name:     "key in middle",
+			connStr:  "LiveEndpoint=https://live.com;InstrumentationKey=mid-key;IngestionEndpoint=https://test.com",
+			expected: "mid-key",
+		},
+		{
+			name:     "only key",
+			connStr:  "InstrumentationKey=only-key",
+			expected: "only-key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractInstrumentationKey(tt.connStr)
+			if result != tt.expected {
+				t.Errorf("extractInstrumentationKey() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}

@@ -7,9 +7,9 @@ import (
 
 func TestLoadConfig(t *testing.T) {
 	tests := []struct {
-		name     string
-		expected *Config
 		envVars  map[string]string
+		expected *Config
+		name     string
 	}{
 		{
 			name:    "disabled by default",
@@ -211,6 +211,151 @@ func TestExtractInstrumentationKey(t *testing.T) {
 			result := extractInstrumentationKey(tt.connStr)
 			if result != tt.expected {
 				t.Errorf("extractInstrumentationKey() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_HeadersParsing(t *testing.T) {
+	tests := []struct {
+		expectedHeaders map[string]string
+		name            string
+		headersEnv      string
+	}{
+		{
+			name:            "empty headers",
+			headersEnv:      "",
+			expectedHeaders: map[string]string{},
+		},
+		{
+			name:       "single header",
+			headersEnv: "key1=value1",
+			expectedHeaders: map[string]string{
+				"key1": "value1",
+			},
+		},
+		{
+			name:       "multiple headers",
+			headersEnv: "key1=value1,key2=value2,key3=value3",
+			expectedHeaders: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+				"key3": "value3",
+			},
+		},
+		{
+			name:       "headers with spaces",
+			headersEnv: "key1 = value1 , key2 = value2",
+			expectedHeaders: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+		{
+			name:       "malformed header without equals",
+			headersEnv: "key1=value1,malformed,key2=value2",
+			expectedHeaders: map[string]string{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+		{
+			name:       "header with equals in value",
+			headersEnv: "key1=value=with=equals",
+			expectedHeaders: map[string]string{
+				"key1": "value=with=equals",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Clearenv()
+			if tt.headersEnv != "" {
+				os.Setenv("OTEL_EXPORTER_OTLP_HEADERS", tt.headersEnv)
+			}
+
+			cfg := LoadConfig()
+
+			if len(cfg.OTLPHeaders) != len(tt.expectedHeaders) {
+				t.Errorf("Expected %d headers, got %d", len(tt.expectedHeaders), len(cfg.OTLPHeaders))
+			}
+
+			for k, v := range tt.expectedHeaders {
+				if cfg.OTLPHeaders[k] != v {
+					t.Errorf("Expected header %s=%s, got %s", k, v, cfg.OTLPHeaders[k])
+				}
+			}
+		})
+	}
+}
+
+func TestLoadConfig_TracingMetricsToggle(t *testing.T) {
+	tests := []struct {
+		envVars         map[string]string
+		name            string
+		expectedEnabled bool
+		expectedTracing bool
+		expectedMetrics bool
+	}{
+		{
+			name: "all enabled",
+			envVars: map[string]string{
+				"OTEL_ENABLED": "true",
+			},
+			expectedEnabled: true,
+			expectedTracing: true,
+			expectedMetrics: true,
+		},
+		{
+			name: "enabled but tracing explicitly disabled",
+			envVars: map[string]string{
+				"OTEL_ENABLED":         "true",
+				"OTEL_TRACING_ENABLED": "false",
+			},
+			expectedEnabled: true,
+			expectedTracing: false,
+			expectedMetrics: true,
+		},
+		{
+			name: "enabled but metrics explicitly disabled",
+			envVars: map[string]string{
+				"OTEL_ENABLED":         "true",
+				"OTEL_METRICS_ENABLED": "false",
+			},
+			expectedEnabled: true,
+			expectedTracing: true,
+			expectedMetrics: false,
+		},
+		{
+			name: "disabled with tracing enabled has no effect",
+			envVars: map[string]string{
+				"OTEL_ENABLED":         "false",
+				"OTEL_TRACING_ENABLED": "true",
+			},
+			expectedEnabled: false,
+			expectedTracing: false,
+			expectedMetrics: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			os.Clearenv()
+			for k, v := range tt.envVars {
+				os.Setenv(k, v)
+			}
+
+			cfg := LoadConfig()
+
+			if cfg.Enabled != tt.expectedEnabled {
+				t.Errorf("Expected Enabled=%v, got %v", tt.expectedEnabled, cfg.Enabled)
+			}
+			if cfg.TracingEnabled != tt.expectedTracing {
+				t.Errorf("Expected TracingEnabled=%v, got %v", tt.expectedTracing, cfg.TracingEnabled)
+			}
+			if cfg.MetricsEnabled != tt.expectedMetrics {
+				t.Errorf("Expected MetricsEnabled=%v, got %v", tt.expectedMetrics, cfg.MetricsEnabled)
 			}
 		})
 	}
