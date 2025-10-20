@@ -203,7 +203,13 @@ func UploadFile(localPath string, remotePath string, cfg *config.SMBConfig, over
 }
 
 // UploadFileWithContext uploads a local file to the SMB share using smbclient with context
-func UploadFileWithContext(ctx context.Context, localPath string, remotePath string, cfg *config.SMBConfig, overwrite bool) error {
+func UploadFileWithContext(
+	ctx context.Context,
+	localPath string,
+	remotePath string,
+	cfg *config.SMBConfig,
+	overwrite bool,
+) error {
 	startTime := time.Now()
 
 	// Start telemetry span

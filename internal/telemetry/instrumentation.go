@@ -39,7 +39,7 @@ func init() {
 		metric.WithUnit("ms"),
 	)
 	if err != nil {
-		// Log error but don't fail initialization
+		smbOperationDuration = nil
 	}
 
 	smbOperationsTotal, err = meter.Int64Counter(
@@ -47,7 +47,7 @@ func init() {
 		metric.WithDescription("Total number of SMB operations"),
 	)
 	if err != nil {
-		// Log error but don't fail initialization
+		smbOperationsTotal = nil
 	}
 
 	smbErrorsTotal, err = meter.Int64Counter(
@@ -55,7 +55,7 @@ func init() {
 		metric.WithDescription("Total number of SMB errors"),
 	)
 	if err != nil {
-		// Log error but don't fail initialization
+		smbErrorsTotal = nil
 	}
 
 	smbFileSize, err = meter.Int64Histogram(
@@ -64,12 +64,16 @@ func init() {
 		metric.WithUnit("bytes"),
 	)
 	if err != nil {
-		// Log error but don't fail initialization
+		smbFileSize = nil
 	}
 }
 
 // StartSMBSpan starts a new span for an SMB operation
-func StartSMBSpan(ctx context.Context, operation string, attributes ...attribute.KeyValue) (context.Context, trace.Span) {
+func StartSMBSpan(
+	ctx context.Context,
+	operation string,
+	attributes ...attribute.KeyValue,
+) (context.Context, trace.Span) {
 	attrs := append([]attribute.KeyValue{
 		attribute.String("smb.operation", operation),
 	}, attributes...)
@@ -81,7 +85,13 @@ func StartSMBSpan(ctx context.Context, operation string, attributes ...attribute
 }
 
 // RecordSMBOperation records metrics for an SMB operation
-func RecordSMBOperation(ctx context.Context, operation string, durationMs float64, err error, attrs ...attribute.KeyValue) {
+func RecordSMBOperation(
+	ctx context.Context,
+	operation string,
+	durationMs float64,
+	err error,
+	attrs ...attribute.KeyValue,
+) {
 	baseAttrs := []attribute.KeyValue{
 		attribute.String("operation", operation),
 	}

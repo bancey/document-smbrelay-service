@@ -8,8 +8,8 @@ import (
 func TestLoadConfig(t *testing.T) {
 	tests := []struct {
 		name     string
-		envVars  map[string]string
 		expected *Config
+		envVars  map[string]string
 	}{
 		{
 			name:    "disabled by default",

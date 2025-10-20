@@ -21,28 +21,41 @@ func Middleware(serviceName string) fiber.Handler {
 	meter := otel.Meter(serviceName)
 
 	// Create metrics
-	httpRequestDuration, _ := meter.Float64Histogram(
+	httpRequestDuration, err := meter.Float64Histogram(
 		"http.server.request.duration",
 		metric.WithDescription("Duration of HTTP requests"),
 		metric.WithUnit("ms"),
 	)
+	if err != nil {
+		// Metrics creation failed, but we continue without them
+		httpRequestDuration = nil
+	}
 
-	httpRequestsTotal, _ := meter.Int64Counter(
+	httpRequestsTotal, err := meter.Int64Counter(
 		"http.server.requests.total",
 		metric.WithDescription("Total number of HTTP requests"),
 	)
+	if err != nil {
+		httpRequestsTotal = nil
+	}
 
-	httpRequestSize, _ := meter.Int64Histogram(
+	httpRequestSize, err := meter.Int64Histogram(
 		"http.server.request.size",
 		metric.WithDescription("Size of HTTP requests"),
 		metric.WithUnit("bytes"),
 	)
+	if err != nil {
+		httpRequestSize = nil
+	}
 
-	httpResponseSize, _ := meter.Int64Histogram(
+	httpResponseSize, err := meter.Int64Histogram(
 		"http.server.response.size",
 		metric.WithDescription("Size of HTTP responses"),
 		metric.WithUnit("bytes"),
 	)
+	if err != nil {
+		httpResponseSize = nil
+	}
 
 	return func(c *fiber.Ctx) error {
 		// Skip telemetry for health checks if desired
@@ -93,14 +106,22 @@ func Middleware(serviceName string) fiber.Handler {
 		}
 
 		// Record metrics
-		httpRequestDuration.Record(ctx, float64(duration), metric.WithAttributes(attrs...))
-		httpRequestsTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
+		if httpRequestDuration != nil {
+			httpRequestDuration.Record(ctx, float64(duration), metric.WithAttributes(attrs...))
+		}
+		if httpRequestsTotal != nil {
+			httpRequestsTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
+		}
 
 		// Record request/response sizes
 		requestSize := len(c.Request().Body())
 		responseSize := len(c.Response().Body())
-		httpRequestSize.Record(ctx, int64(requestSize), metric.WithAttributes(attrs...))
-		httpResponseSize.Record(ctx, int64(responseSize), metric.WithAttributes(attrs...))
+		if httpRequestSize != nil {
+			httpRequestSize.Record(ctx, int64(requestSize), metric.WithAttributes(attrs...))
+		}
+		if httpResponseSize != nil {
+			httpResponseSize.Record(ctx, int64(responseSize), metric.WithAttributes(attrs...))
+		}
 
 		// Update span with response information
 		span.SetAttributes(

@@ -12,18 +12,18 @@ type Config struct {
 	ServiceName string
 	// ServiceVersion is the version of the service
 	ServiceVersion string
+	// OTLPEndpoint is the OTLP endpoint for traces and metrics
+	OTLPEndpoint string
+	// AzureAppInsightsConnectionString is the Application Insights connection string
+	AzureAppInsightsConnectionString string
+	// OTLPHeaders are additional headers to send with OTLP requests (e.g., for authentication)
+	OTLPHeaders map[string]string
 	// Enabled determines if telemetry is enabled
 	Enabled bool
 	// TracingEnabled determines if tracing is enabled
 	TracingEnabled bool
 	// MetricsEnabled determines if metrics are enabled
 	MetricsEnabled bool
-	// OTLPEndpoint is the OTLP endpoint for traces and metrics
-	OTLPEndpoint string
-	// OTLPHeaders are additional headers to send with OTLP requests (e.g., for authentication)
-	OTLPHeaders map[string]string
-	// AzureAppInsightsConnectionString is the Application Insights connection string
-	AzureAppInsightsConnectionString string
 }
 
 // LoadConfig loads telemetry configuration from environment variables
