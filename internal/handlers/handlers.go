@@ -109,6 +109,11 @@ func UploadHandler(c *fiber.Ctx) error {
 		})
 	}
 
+	// If remote_path is a directory (ends with / or \), append the uploaded filename
+	if strings.HasSuffix(remotePath, "/") || strings.HasSuffix(remotePath, "\\") {
+		remotePath = filepath.Join(remotePath, filepath.Base(file.Filename))
+	}
+
 	// Save uploaded file to temp location
 	tmpDir := os.TempDir()
 	tmpPath := filepath.Join(tmpDir, fmt.Sprintf("smb-upload-%s", filepath.Base(file.Filename)))
@@ -299,8 +304,9 @@ func GetOpenAPISpec(c *fiber.Ctx) error {
 											"description": "The file to upload",
 										},
 										"remote_path": map[string]interface{}{
-											"type":        "string",
-											"description": "Path within the SMB share",
+											"type": "string",
+											"description": `Path within the SMB share.
+											 If it ends with / or \\, the uploaded filename will be automatically appended.`,
 										},
 										"overwrite": map[string]interface{}{
 											"type":        "boolean",
