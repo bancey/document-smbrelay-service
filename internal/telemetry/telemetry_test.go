@@ -349,3 +349,56 @@ func TestExtractInstrumentationKey_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+func TestStripScheme(t *testing.T) {
+	tests := []struct {
+		name     string
+		endpoint string
+		expected string
+	}{
+		{
+			name:     "https URL",
+			endpoint: "https://uksouth-1.in.applicationinsights.azure.com",
+			expected: "uksouth-1.in.applicationinsights.azure.com",
+		},
+		{
+			name:     "http URL",
+			endpoint: "http://localhost:4318",
+			expected: "localhost:4318",
+		},
+		{
+			name:     "no scheme",
+			endpoint: "localhost:4318",
+			expected: "localhost:4318",
+		},
+		{
+			name:     "hostname only",
+			endpoint: "example.com",
+			expected: "example.com",
+		},
+		{
+			name:     "hostname with port",
+			endpoint: "example.com:8080",
+			expected: "example.com:8080",
+		},
+		{
+			name:     "https with port",
+			endpoint: "https://example.com:8080",
+			expected: "example.com:8080",
+		},
+		{
+			name:     "empty string",
+			endpoint: "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripScheme(tt.endpoint)
+			if result != tt.expected {
+				t.Errorf("stripScheme() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}

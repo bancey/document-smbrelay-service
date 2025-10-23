@@ -94,8 +94,11 @@ func initTracing(ctx context.Context, cfg *Config, res *resource.Resource) (*sdk
 		// Use OTLP exporter (for Azure Application Insights or other OTLP backends)
 		logger.Info("Configuring OTLP trace exporter: %s", cfg.OTLPEndpoint)
 
+		// Strip scheme from endpoint - the OTLP HTTP exporter expects only host:port
+		endpoint := stripScheme(cfg.OTLPEndpoint)
+
 		opts := []otlptracehttp.Option{
-			otlptracehttp.WithEndpoint(cfg.OTLPEndpoint),
+			otlptracehttp.WithEndpoint(endpoint),
 		}
 
 		// Add headers if provided
@@ -151,8 +154,11 @@ func initMetrics(ctx context.Context, cfg *Config, res *resource.Resource) (*sdk
 		// Use OTLP exporter
 		logger.Info("Configuring OTLP metric exporter: %s", cfg.OTLPEndpoint)
 
+		// Strip scheme from endpoint - the OTLP HTTP exporter expects only host:port
+		endpoint := stripScheme(cfg.OTLPEndpoint)
+
 		opts := []otlpmetrichttp.Option{
-			otlpmetrichttp.WithEndpoint(cfg.OTLPEndpoint),
+			otlpmetrichttp.WithEndpoint(endpoint),
 		}
 
 		// Add headers if provided
@@ -232,4 +238,12 @@ func extractInstrumentationKey(connStr string) string {
 		}
 	}
 	return ""
+}
+
+// stripScheme removes the http:// or https:// prefix from a URL
+// The OTLP HTTP exporters expect only the host:port part
+func stripScheme(endpoint string) string {
+	endpoint = strings.TrimPrefix(endpoint, "https://")
+	endpoint = strings.TrimPrefix(endpoint, "http://")
+	return endpoint
 }
