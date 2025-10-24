@@ -71,12 +71,14 @@ func TestLoadConfig(t *testing.T) {
 				"APPLICATIONINSIGHTS_CONNECTION_STRING": "InstrumentationKey=test-key;IngestionEndpoint=https://test.applicationinsights.azure.com",
 			},
 			expected: &Config{
-				ServiceName:                      "document-smbrelay-service",
-				ServiceVersion:                   "1.0.0",
-				Enabled:                          true,
-				TracingEnabled:                   true,
-				MetricsEnabled:                   true,
-				OTLPEndpoint:                     "https://test.applicationinsights.azure.com",
+				ServiceName:    "document-smbrelay-service",
+				ServiceVersion: "1.0.0",
+				// Application Insights alone does NOT auto-enable telemetry
+				// User must explicitly set OTEL_ENABLED=true and OTEL_EXPORTER_OTLP_ENDPOINT
+				Enabled:                          false,
+				TracingEnabled:                   false,
+				MetricsEnabled:                   false,
+				OTLPEndpoint:                     "",
 				AzureAppInsightsConnectionString: "InstrumentationKey=test-key;IngestionEndpoint=https://test.applicationinsights.azure.com",
 			},
 		},
@@ -145,72 +147,6 @@ func TestLoadConfig(t *testing.T) {
 			if cfg.AzureAppInsightsConnectionString != tt.expected.AzureAppInsightsConnectionString {
 				t.Errorf("AzureAppInsightsConnectionString = %v, want %v",
 					cfg.AzureAppInsightsConnectionString, tt.expected.AzureAppInsightsConnectionString)
-			}
-		})
-	}
-}
-
-func TestExtractIngestionEndpoint(t *testing.T) {
-	tests := []struct {
-		name     string
-		connStr  string
-		expected string
-	}{
-		{
-			name:     "with ingestion endpoint",
-			connStr:  "InstrumentationKey=test-key;IngestionEndpoint=https://test.applicationinsights.azure.com/",
-			expected: "https://test.applicationinsights.azure.com",
-		},
-		{
-			name:     "without ingestion endpoint",
-			connStr:  "InstrumentationKey=test-key",
-			expected: "https://dc.services.visualstudio.com",
-		},
-		{
-			name:     "multiple parts",
-			connStr:  "InstrumentationKey=test-key;LiveEndpoint=https://live.test.com;IngestionEndpoint=https://ingest.test.com",
-			expected: "https://ingest.test.com",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := extractIngestionEndpoint(tt.connStr)
-			if result != tt.expected {
-				t.Errorf("extractIngestionEndpoint() = %v, want %v", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestExtractInstrumentationKey(t *testing.T) {
-	tests := []struct {
-		name     string
-		connStr  string
-		expected string
-	}{
-		{
-			name:     "with instrumentation key",
-			connStr:  "InstrumentationKey=test-key-123;IngestionEndpoint=https://test.com",
-			expected: "test-key-123",
-		},
-		{
-			name:     "without instrumentation key",
-			connStr:  "IngestionEndpoint=https://test.com",
-			expected: "",
-		},
-		{
-			name:     "only instrumentation key",
-			connStr:  "InstrumentationKey=abc-def-ghi",
-			expected: "abc-def-ghi",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := extractInstrumentationKey(tt.connStr)
-			if result != tt.expected {
-				t.Errorf("extractInstrumentationKey() = %v, want %v", result, tt.expected)
 			}
 		})
 	}

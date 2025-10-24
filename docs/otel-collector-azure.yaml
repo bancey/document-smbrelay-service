@@ -1,0 +1,84 @@
+# OpenTelemetry Collector Configuration for Azure Application Insights
+# 
+# This configuration receives OTLP data from your Go application and forwards
+# it to Azure Application Insights using the Azure Monitor exporter.
+#
+# Usage:
+#   1. Replace YOUR_CONNECTION_STRING with your actual Application Insights connection string
+#   2. Deploy this collector (Docker, Kubernetes, or standalone binary)
+#   3. Configure your application to send telemetry to this collector:
+#        export OTEL_ENABLED=true
+#        export OTEL_EXPORTER_OTLP_ENDPOINT=collector-host:4318
+
+receivers:
+  # OTLP receiver accepts telemetry data via HTTP and gRPC
+  otlp:
+    protocols:
+      # HTTP receiver on port 4318 (used by this application)
+      http:
+        endpoint: 0.0.0.0:4318
+      # gRPC receiver on port 4317 (optional)
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  # Batch processor batches telemetry data before export (improves performance)
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  # Memory limiter prevents the collector from running out of memory
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+  # Resource detection adds cloud provider and host information
+  resourcedetection:
+    detectors: [env, system, docker]
+    timeout: 5s
+
+exporters:
+  # Azure Monitor exporter sends data to Application Insights
+  azuremonitor:
+    # Connection string format:
+    # InstrumentationKey=xxx;IngestionEndpoint=https://uksouth-1.in.applicationinsights.azure.com/;LiveEndpoint=https://uksouth.livediagnostics.monitor.azure.com/;ApplicationId=xxx
+    connection_string: "${APPLICATIONINSIGHTS_CONNECTION_STRING}"
+    # Alternatively, use environment variable or set directly:
+    # connection_string: "InstrumentationKey=YOUR_KEY;IngestionEndpoint=https://uksouth-1.in.applicationinsights.azure.com/"
+
+  # Logging exporter for debugging (optional)
+  logging:
+    loglevel: info
+
+service:
+  # Configure the telemetry pipelines
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [azuremonitor]
+      # Uncomment to also log traces:
+      # exporters: [azuremonitor, logging]
+
+    # Metrics pipeline
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [azuremonitor]
+      # Uncomment to also log metrics:
+      # exporters: [azuremonitor, logging]
+
+    # Logs pipeline (optional)
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, resourcedetection, batch]
+      exporters: [azuremonitor]
+
+  # Extensions for health checks and observability
+  extensions: [health_check]
+
+extensions:
+  # Health check extension provides /health endpoint
+  health_check:
+    endpoint: 0.0.0.0:13133

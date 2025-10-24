@@ -1,0 +1,145 @@
+version: '3.8'
+
+# Example Docker Compose setup for document-smbrelay-service with
+# Azure Application Insights via OpenTelemetry Collector
+#
+# The OpenTelemetry Collector configuration is embedded directly in this file,
+# so no external config files or Azure Files shares are needed.
+#
+# Usage:
+#   1. Set your Application Insights connection string in .env file:
+#        APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=xxx;IngestionEndpoint=https://uksouth-1.in.applicationinsights.azure.com/;..."
+#   2. Run: docker-compose -f docker-compose.azure-insights.yml up
+
+services:
+  # Document SMB Relay Service
+  smbrelay:
+    image: document-smbrelay:latest
+    container_name: document-smb-relay
+    ports:
+      - "8080:8080"
+    environment:
+      # === SMB Configuration ===
+      SMB_SERVER_NAME: ${SMB_SERVER_NAME}
+      SMB_SERVER_IP: ${SMB_SERVER_IP}
+      SMB_SHARE_NAME: ${SMB_SHARE_NAME}
+      SMB_USERNAME: ${SMB_USERNAME}
+      SMB_PASSWORD: ${SMB_PASSWORD}
+      SMB_DOMAIN: ${SMB_DOMAIN:-}
+      SMB_PORT: ${SMB_PORT:-445}
+      SMB_BASE_PATH: ${SMB_BASE_PATH:-}
+      
+      # === OpenTelemetry Configuration ===
+      # Enable OpenTelemetry and point to the collector
+      OTEL_ENABLED: "true"
+      OTEL_SERVICE_NAME: document-smbrelay-service
+      OTEL_SERVICE_VERSION: ${SERVICE_VERSION:-1.0.0}
+      
+      # CRITICAL: Point to the OpenTelemetry Collector, NOT directly to Azure
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4318
+      
+      # === Logging ===
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+    networks:
+      - smbrelay-network
+    restart: unless-stopped
+
+  # OpenTelemetry Collector - bridges between app and Azure Application Insights
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    ports:
+      - "4318:4318"   # OTLP HTTP receiver
+      - "4317:4317"   # OTLP gRPC receiver (optional)
+      - "13133:13133" # Health check endpoint
+    environment:
+      # Pass through the Application Insights connection string
+      APPLICATIONINSIGHTS_CONNECTION_STRING: ${APPLICATIONINSIGHTS_CONNECTION_STRING}
+    # Embed the OTEL Collector configuration directly
+    configs:
+      - source: otel-config
+        target: /etc/otelcol-contrib/config.yaml
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:13133/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - smbrelay-network
+    restart: unless-stopped
+
+configs:
+  otel-config:
+    content: |
+      # OpenTelemetry Collector Configuration for Azure Application Insights
+      receivers:
+        otlp:
+          protocols:
+            http:
+              endpoint: 0.0.0.0:4318
+            grpc:
+              endpoint: 0.0.0.0:4317
+
+      processors:
+        batch:
+          timeout: 10s
+          send_batch_size: 1024
+        memory_limiter:
+          check_interval: 1s
+          limit_mib: 512
+        resourcedetection:
+          detectors: [env, system, docker]
+          timeout: 5s
+
+      exporters:
+        azuremonitor:
+          connection_string: "$${APPLICATIONINSIGHTS_CONNECTION_STRING}"
+        logging:
+          loglevel: info
+
+      service:
+        pipelines:
+          traces:
+            receivers: [otlp]
+            processors: [memory_limiter, resourcedetection, batch]
+            exporters: [azuremonitor]
+          metrics:
+            receivers: [otlp]
+            processors: [memory_limiter, resourcedetection, batch]
+            exporters: [azuremonitor]
+          logs:
+            receivers: [otlp]
+            processors: [memory_limiter, resourcedetection, batch]
+            exporters: [azuremonitor]
+        extensions: [health_check]
+
+      extensions:
+        health_check:
+          endpoint: 0.0.0.0:13133
+
+networks:
+  smbrelay-network:
+    driver: bridge
+
+# Example .env file:
+# 
+# # Azure Application Insights
+# APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=xxx;IngestionEndpoint=https://uksouth-1.in.applicationinsights.azure.com/;LiveEndpoint=https://uksouth.livediagnostics.monitor.azure.com/;ApplicationId=xxx"
+# 
+# # SMB Configuration
+# SMB_SERVER_NAME=fileserver
+# SMB_SERVER_IP=192.168.1.100
+# SMB_SHARE_NAME=Documents
+# SMB_USERNAME=myuser
+# SMB_PASSWORD=mypassword
+# SMB_DOMAIN=MYDOMAIN
+# 
+# # Optional
+# SERVICE_VERSION=1.0.0
+# LOG_LEVEL=INFO

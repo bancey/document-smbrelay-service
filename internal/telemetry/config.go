@@ -61,15 +61,20 @@ func LoadConfig() *Config {
 	// Azure Application Insights connection string
 	appInsightsConnStr := os.Getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
 
-	// If Application Insights is configured, enable telemetry and set OTLP endpoint
-	if appInsightsConnStr != "" {
-		enabled = true
-		// Azure Monitor ingests OpenTelemetry data via OTLP
-		if otlpEndpoint == "" {
-			// Extract ingestion endpoint from connection string
-			otlpEndpoint = extractIngestionEndpoint(appInsightsConnStr)
-		}
-	}
+	// Azure Application Insights setup
+	// Note: As of October 2025, Azure Application Insights does NOT support direct OTLP HTTP ingestion.
+	// The recommended approach is to use an OpenTelemetry Collector as a bridge:
+	//   1. Deploy OpenTelemetry Collector with Azure Monitor exporter
+	//   2. Point your application to the collector's OTLP endpoint
+	//   3. The collector forwards telemetry to Application Insights
+	//
+	// To use this service with Application Insights:
+	//   - Set OTEL_ENABLED=true
+	//   - Set OTEL_EXPORTER_OTLP_ENDPOINT to your OpenTelemetry Collector endpoint
+	//   - Configure the collector with your APPLICATIONINSIGHTS_CONNECTION_STRING
+	//
+	// The connection string is stored for reference but does not enable direct export.
+	// If appInsightsConnStr is set without otlpEndpoint, the Initialize function will return an error.
 
 	return &Config{
 		ServiceName:                      serviceName,
@@ -81,19 +86,4 @@ func LoadConfig() *Config {
 		OTLPHeaders:                      headers,
 		AzureAppInsightsConnectionString: appInsightsConnStr,
 	}
-}
-
-// extractIngestionEndpoint extracts the ingestion endpoint from Application Insights connection string
-func extractIngestionEndpoint(connStr string) string {
-	// Connection string format: InstrumentationKey=xxx;IngestionEndpoint=https://xxx
-	parts := strings.Split(connStr, ";")
-	for _, part := range parts {
-		if strings.HasPrefix(part, "IngestionEndpoint=") {
-			endpoint := strings.TrimPrefix(part, "IngestionEndpoint=")
-			// Azure Monitor OTLP endpoint is at /v1/traces and /v1/metrics
-			return strings.TrimSuffix(endpoint, "/")
-		}
-	}
-	// Default to global ingestion endpoint if not specified
-	return "https://dc.services.visualstudio.com"
 }

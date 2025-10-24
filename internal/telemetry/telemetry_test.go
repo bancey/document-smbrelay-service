@@ -147,8 +147,8 @@ func TestShutdown_WithProviders(t *testing.T) {
 	}
 }
 
-func TestInitialize_WithAppInsights(t *testing.T) {
-	// Test with a mock Application Insights connection string
+func TestInitialize_WithAppInsights_NoCollector(t *testing.T) {
+	// Test that Azure Application Insights without collector endpoint returns error
 	cfg := &Config{
 		Enabled:                          true,
 		TracingEnabled:                   true,
@@ -156,21 +156,48 @@ func TestInitialize_WithAppInsights(t *testing.T) {
 		ServiceName:                      "test-service",
 		ServiceVersion:                   "1.0.0",
 		AzureAppInsightsConnectionString: "InstrumentationKey=test-key;IngestionEndpoint=https://test.applicationinsights.azure.com",
-		OTLPEndpoint:                     "test.applicationinsights.azure.com",
+		OTLPEndpoint:                     "", // No collector endpoint - should fail
+	}
+
+	ctx := context.Background()
+	provider, err := Initialize(ctx, cfg)
+
+	// Should return error because Azure AI requires collector
+	if err == nil {
+		t.Error("Initialize() should return error when Azure AI connection string is set without OTLP endpoint")
+		if provider != nil {
+			_ = provider.Shutdown(context.Background())
+		}
+	}
+
+	if provider != nil {
+		t.Error("Initialize() should return nil provider when Azure AI validation fails")
+	}
+}
+
+func TestInitialize_WithAppInsights_WithCollector(t *testing.T) {
+	// Test with collector endpoint set - should work
+	cfg := &Config{
+		Enabled:                          true,
+		TracingEnabled:                   true,
+		MetricsEnabled:                   true,
+		ServiceName:                      "test-service",
+		ServiceVersion:                   "1.0.0",
+		AzureAppInsightsConnectionString: "InstrumentationKey=test-key;IngestionEndpoint=https://test.applicationinsights.azure.com",
+		OTLPEndpoint:                     "localhost:4318", // Collector endpoint set
 		OTLPHeaders:                      make(map[string]string),
 	}
 
 	ctx := context.Background()
 	provider, err := Initialize(ctx, cfg)
 
-	// Note: This will fail to connect but should still initialize the provider
+	// Should succeed because collector endpoint is set
 	if provider == nil {
-		t.Fatal("Initialize() should return non-nil provider even if connection fails")
+		t.Fatal("Initialize() should return non-nil provider when collector endpoint is set")
 	}
 
-	// The initialization might fail due to network issues, but we test that it doesn't panic
+	// Clean up
 	if err == nil {
-		// Clean up only if successful
 		_ = provider.Shutdown(context.Background())
 	}
 }
@@ -312,39 +339,44 @@ func TestShutdown_NilProviders(t *testing.T) {
 	}
 }
 
-func TestExtractInstrumentationKey_EdgeCases(t *testing.T) {
+func TestIsLocalEndpoint(t *testing.T) {
 	tests := []struct {
 		name     string
-		connStr  string
-		expected string
+		endpoint string
+		expected bool
 	}{
 		{
-			name:     "empty string",
-			connStr:  "",
-			expected: "",
+			name:     "localhost",
+			endpoint: "localhost:4318",
+			expected: true,
 		},
 		{
-			name:     "key at end",
-			connStr:  "IngestionEndpoint=https://test.com;InstrumentationKey=end-key",
-			expected: "end-key",
+			name:     "127.0.0.1",
+			endpoint: "127.0.0.1:4318",
+			expected: true,
 		},
 		{
-			name:     "key in middle",
-			connStr:  "LiveEndpoint=https://live.com;InstrumentationKey=mid-key;IngestionEndpoint=https://test.com",
-			expected: "mid-key",
+			name:     "0.0.0.0",
+			endpoint: "0.0.0.0:4318",
+			expected: true,
 		},
 		{
-			name:     "only key",
-			connStr:  "InstrumentationKey=only-key",
-			expected: "only-key",
+			name:     "remote host",
+			endpoint: "example.com:4318",
+			expected: false,
+		},
+		{
+			name:     "Azure endpoint",
+			endpoint: "uksouth-1.in.applicationinsights.azure.com",
+			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractInstrumentationKey(tt.connStr)
+			result := isLocalEndpoint(tt.endpoint)
 			if result != tt.expected {
-				t.Errorf("extractInstrumentationKey() = %v, want %v", result, tt.expected)
+				t.Errorf("isLocalEndpoint() = %v, want %v", result, tt.expected)
 			}
 		})
 	}

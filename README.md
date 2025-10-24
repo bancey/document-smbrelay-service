@@ -12,7 +12,7 @@ A high-performance HTTP service built with Go that accepts file uploads and writ
 - **📚 OpenAPI Documentation**: Interactive Swagger UI at `/docs`
 - **🐳 Docker Support**: Multi-stage builds for minimal image size (~30MB)
 - **🔐 Flexible Authentication**: Supports NTLM, Negotiate, and Kerberos protocols
-- **📊 OpenTelemetry Integration**: Full observability with traces, metrics, and Azure Application Insights support
+- **📊 OpenTelemetry Integration**: Full observability with traces, metrics, and Azure Application Insights support (via OpenTelemetry Collector)
 
 ## Quick Start
 
@@ -138,12 +138,6 @@ The service includes comprehensive OpenTelemetry instrumentation for distributed
 - `OTEL_METRICS_ENABLED`: Enable metrics collection - `true|false` (default: `true` if `OTEL_ENABLED`)
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: OTLP endpoint for traces and metrics (e.g., `localhost:4318`)
 - `OTEL_EXPORTER_OTLP_HEADERS`: Additional headers for OTLP requests (format: `key1=value1,key2=value2`)
-- `APPLICATIONINSIGHTS_CONNECTION_STRING`: Azure Application Insights connection string (automatically enables OpenTelemetry)
-
-**Example with Azure Application Insights:**
-```bash
-export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=xxx;IngestionEndpoint=https://xxx.applicationinsights.azure.com"
-```
 
 **Example with generic OTLP backend:**
 ```bash
@@ -152,9 +146,21 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4318
 export OTEL_SERVICE_NAME=my-smbrelay
 ```
 
+**Azure Application Insights Integration:**
+
+> **⚠️ Important**: Azure Application Insights does NOT support direct OTLP ingestion for Go applications. You must deploy an OpenTelemetry Collector as a bridge. See the complete setup guide in [docs/OPENTELEMETRY.md](docs/OPENTELEMETRY.md#azure-application-insights).
+
+Quick setup:
+```bash
+# 1. Deploy OpenTelemetry Collector (see docker-compose.azure-insights.yml)
+# 2. Configure your application to use the collector:
+export OTEL_ENABLED=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=collector-host:4318
+```
+
 See [docs/OPENTELEMETRY.md](docs/OPENTELEMETRY.md) for complete OpenTelemetry documentation including:
 - Detailed configuration options
-- Azure Application Insights integration
+- Azure Application Insights setup with OpenTelemetry Collector
 - Supported OTLP backends (Jaeger, Grafana, etc.)
 - Metrics and traces collected
 - Usage examples and troubleshooting
@@ -585,6 +591,41 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 See [DOCKER_TESTING.md](DOCKER_TESTING.md) for docker-compose examples with test SMB servers.
 
 For detailed information about the standard and debug Docker images, see [DOCKER_IMAGES.md](DOCKER_IMAGES.md).
+
+## Deployment
+
+### Azure App Service
+
+This service can be deployed to Azure App Service with OpenTelemetry Collector integration for Application Insights.
+
+**Quick Deploy:**
+```bash
+./deploy-azure.sh
+```
+
+The automated script will:
+- ✅ Create all required Azure resources (Resource Group, Application Insights, Container Registry, App Service)
+- ✅ Build and push Docker images
+- ✅ Configure environment variables and health checks
+- ✅ Set up OpenTelemetry Collector integration
+
+**Deployment Options:**
+1. **Multi-Container (Recommended):** Separate app and collector containers using Docker Compose
+2. **Single-Container:** Combined app + collector using supervisord
+
+**Manual Deployment:**
+
+For complete step-by-step instructions, architecture diagrams, security best practices, and troubleshooting, see:
+
+📖 **[Azure App Service Deployment Guide](docs/AZURE_APP_SERVICE_DEPLOYMENT.md)**
+
+The guide covers:
+- Complete Azure CLI setup instructions
+- Both multi-container and single-container approaches
+- Application Insights integration with OpenTelemetry
+- Security configuration and secrets management
+- Cost optimization strategies
+- Comprehensive troubleshooting section
 
 ## Development
 

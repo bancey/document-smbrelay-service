@@ -35,6 +35,17 @@ func Initialize(ctx context.Context, cfg *Config) (*Provider, error) {
 		return &Provider{config: cfg}, nil
 	}
 
+	// Check for Azure Application Insights without OTLP endpoint configuration
+	if cfg.AzureAppInsightsConnectionString != "" && cfg.OTLPEndpoint == "" {
+		logger.Warn("⚠️  Azure Application Insights connection string detected but OTEL_EXPORTER_OTLP_ENDPOINT is not set")
+		logger.Warn("⚠️  Azure Application Insights does NOT support direct OTLP HTTP ingestion")
+		logger.Warn("⚠️  Please deploy an OpenTelemetry Collector and set OTEL_EXPORTER_OTLP_ENDPOINT")
+		logger.Warn("⚠️  See docs/OPENTELEMETRY.md for setup instructions")
+		return nil, fmt.Errorf(
+			"azure Application Insights requires OpenTelemetry Collector - set OTEL_EXPORTER_OTLP_ENDPOINT",
+		)
+	}
+
 	logger.Info("Initializing OpenTelemetry instrumentation")
 	logger.Info("Service: %s, Version: %s", cfg.ServiceName, cfg.ServiceVersion)
 
@@ -93,36 +104,9 @@ func initTracing(ctx context.Context, cfg *Config, res *resource.Resource) (*sdk
 	if cfg.OTLPEndpoint != "" {
 		// Use OTLP exporter (for Azure Application Insights or other OTLP backends)
 		logger.Info("Configuring OTLP trace exporter: %s", cfg.OTLPEndpoint)
-
-		// Strip scheme from endpoint - the OTLP HTTP exporter expects only host:port
-		endpoint := stripScheme(cfg.OTLPEndpoint)
-
-		opts := []otlptracehttp.Option{
-			otlptracehttp.WithEndpoint(endpoint),
-		}
-
-		// Add headers if provided
-		if len(cfg.OTLPHeaders) > 0 {
-			opts = append(opts, otlptracehttp.WithHeaders(cfg.OTLPHeaders))
-		}
-
-		// If using Azure Application Insights connection string
-		if cfg.AzureAppInsightsConnectionString != "" {
-			logger.Info("Configuring for Azure Application Insights")
-			// Add instrumentation key as header
-			instrumentationKey := extractInstrumentationKey(cfg.AzureAppInsightsConnectionString)
-			if instrumentationKey != "" {
-				if cfg.OTLPHeaders == nil {
-					cfg.OTLPHeaders = make(map[string]string)
-				}
-				cfg.OTLPHeaders["x-api-key"] = instrumentationKey
-				opts = append(opts, otlptracehttp.WithHeaders(cfg.OTLPHeaders))
-			}
-		}
-
-		exporter, err = otlptracehttp.New(ctx, opts...)
+		exporter, err = createOTLPTraceExporter(ctx, cfg)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create OTLP trace exporter: %w", err)
+			return nil, err
 		}
 	} else {
 		// Use stdout exporter for development
@@ -153,34 +137,9 @@ func initMetrics(ctx context.Context, cfg *Config, res *resource.Resource) (*sdk
 	if cfg.OTLPEndpoint != "" {
 		// Use OTLP exporter
 		logger.Info("Configuring OTLP metric exporter: %s", cfg.OTLPEndpoint)
-
-		// Strip scheme from endpoint - the OTLP HTTP exporter expects only host:port
-		endpoint := stripScheme(cfg.OTLPEndpoint)
-
-		opts := []otlpmetrichttp.Option{
-			otlpmetrichttp.WithEndpoint(endpoint),
-		}
-
-		// Add headers if provided
-		if len(cfg.OTLPHeaders) > 0 {
-			opts = append(opts, otlpmetrichttp.WithHeaders(cfg.OTLPHeaders))
-		}
-
-		// If using Azure Application Insights
-		if cfg.AzureAppInsightsConnectionString != "" {
-			instrumentationKey := extractInstrumentationKey(cfg.AzureAppInsightsConnectionString)
-			if instrumentationKey != "" {
-				if cfg.OTLPHeaders == nil {
-					cfg.OTLPHeaders = make(map[string]string)
-				}
-				cfg.OTLPHeaders["x-api-key"] = instrumentationKey
-				opts = append(opts, otlpmetrichttp.WithHeaders(cfg.OTLPHeaders))
-			}
-		}
-
-		exporter, err = otlpmetrichttp.New(ctx, opts...)
+		exporter, err = createOTLPMetricExporter(ctx, cfg)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
+			return nil, err
 		}
 	} else {
 		// Use stdout exporter for development
@@ -228,16 +187,82 @@ func (p *Provider) Shutdown(ctx context.Context) error {
 	return nil
 }
 
-// extractInstrumentationKey extracts the instrumentation key from Application Insights connection string
-func extractInstrumentationKey(connStr string) string {
-	// Connection string format: InstrumentationKey=xxx;IngestionEndpoint=https://xxx
-	parts := strings.Split(connStr, ";")
-	for _, part := range parts {
-		if strings.HasPrefix(part, "InstrumentationKey=") {
-			return strings.TrimPrefix(part, "InstrumentationKey=")
-		}
+// otlpConfig holds common OTLP configuration
+type otlpConfig struct {
+	headers      map[string]string
+	endpoint     string
+	exporterType string // "trace" or "metric"
+	isInsecure   bool
+}
+
+// buildOTLPConfig creates common OTLP configuration from the telemetry config
+func buildOTLPConfig(cfg *Config, exporterType string) *otlpConfig {
+	endpoint := stripScheme(cfg.OTLPEndpoint)
+	isInsecure := isLocalEndpoint(endpoint)
+
+	// Log TLS configuration
+	if !isInsecure {
+		logger.Info("Using TLS for OTLP %s export", exporterType)
+	} else {
+		logger.Info("Using insecure HTTP for local OTLP %s export", exporterType)
 	}
-	return ""
+
+	return &otlpConfig{
+		endpoint:     endpoint,
+		isInsecure:   isInsecure,
+		headers:      cfg.OTLPHeaders,
+		exporterType: exporterType,
+	}
+}
+
+// createOTLPTraceExporter creates an OTLP trace exporter with common configuration
+//
+//nolint:dupl // Unavoidable duplication due to different exporter types (trace vs metric)
+func createOTLPTraceExporter(ctx context.Context, cfg *Config) (sdktrace.SpanExporter, error) {
+	otlpCfg := buildOTLPConfig(cfg, "trace")
+
+	opts := []otlptracehttp.Option{
+		otlptracehttp.WithEndpoint(otlpCfg.endpoint),
+	}
+
+	if otlpCfg.isInsecure {
+		opts = append(opts, otlptracehttp.WithInsecure())
+	}
+
+	if len(otlpCfg.headers) > 0 {
+		opts = append(opts, otlptracehttp.WithHeaders(otlpCfg.headers))
+	}
+
+	exporter, err := otlptracehttp.New(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OTLP trace exporter: %w", err)
+	}
+	return exporter, nil
+}
+
+// createOTLPMetricExporter creates an OTLP metric exporter with common configuration
+//
+//nolint:dupl // Unavoidable duplication due to different exporter types (trace vs metric)
+func createOTLPMetricExporter(ctx context.Context, cfg *Config) (sdkmetric.Exporter, error) {
+	otlpCfg := buildOTLPConfig(cfg, "metric")
+
+	opts := []otlpmetrichttp.Option{
+		otlpmetrichttp.WithEndpoint(otlpCfg.endpoint),
+	}
+
+	if otlpCfg.isInsecure {
+		opts = append(opts, otlpmetrichttp.WithInsecure())
+	}
+
+	if len(otlpCfg.headers) > 0 {
+		opts = append(opts, otlpmetrichttp.WithHeaders(otlpCfg.headers))
+	}
+
+	exporter, err := otlpmetrichttp.New(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
+	}
+	return exporter, nil
 }
 
 // stripScheme removes the http:// or https:// prefix from a URL
@@ -246,4 +271,12 @@ func stripScheme(endpoint string) string {
 	endpoint = strings.TrimPrefix(endpoint, "https://")
 	endpoint = strings.TrimPrefix(endpoint, "http://")
 	return endpoint
+}
+
+// isLocalEndpoint checks if an endpoint is a local development endpoint
+// Returns true for localhost, 127.0.0.1, and 0.0.0.0 addresses
+func isLocalEndpoint(endpoint string) bool {
+	return strings.HasPrefix(endpoint, "localhost") ||
+		strings.HasPrefix(endpoint, "127.0.0.1") ||
+		strings.HasPrefix(endpoint, "0.0.0.0")
 }

@@ -43,6 +43,8 @@ func main() {
 	app := fiber.New(fiber.Config{
 		AppName:               "Document SMB Relay Service",
 		DisableStartupMessage: false,
+		ReadBufferSize:        16 * 1024, // 16KB - increased from default 4KB to handle larger headers
+		// (e.g., OpenTelemetry trace context, large cookies, auth tokens)
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			if e, ok := err.(*fiber.Error); ok {

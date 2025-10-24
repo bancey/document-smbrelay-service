@@ -36,16 +36,111 @@ You'll see trace and metric data in the console output.
 
 ### Azure Application Insights
 
-The easiest way to use Azure Application Insights is with the connection string:
+**Important**: Azure Application Insights currently does NOT support direct OTLP HTTP ingestion for Go applications. You must use an **OpenTelemetry Collector** as a bridge.
 
-```bash
-export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=xxx;IngestionEndpoint=https://xxx.applicationinsights.azure.com"
+#### Setup with OpenTelemetry Collector
+
+1. **Deploy OpenTelemetry Collector** with the Azure Monitor exporter
+2. **Configure your application** to send telemetry to the collector
+3. **Configure the collector** to forward telemetry to Application Insights
+
+Example collector configuration (`otel-collector-config.yaml`):
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+exporters:
+  azuremonitor:
+    connection_string: "InstrumentationKey=xxx;IngestionEndpoint=https://uksouth-1.in.applicationinsights.azure.com/;LiveEndpoint=https://uksouth.livediagnostics.monitor.azure.com/;ApplicationId=xxx"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [azuremonitor]
+    metrics:
+      receivers: [otlp]
+      exporters: [azuremonitor]
 ```
 
-This automatically:
-- Enables OpenTelemetry
-- Configures the OTLP endpoint
-- Sets up authentication headers
+Application configuration:
+
+```bash
+# Enable OpenTelemetry
+export OTEL_ENABLED=true
+export OTEL_SERVICE_NAME=document-smbrelay-service
+
+# Point to your OpenTelemetry Collector
+export OTEL_EXPORTER_OTLP_ENDPOINT=your-collector-host:4318
+
+# SMB Configuration
+export SMB_SERVER_NAME=fileserver
+export SMB_SERVER_IP=192.168.1.100
+export SMB_SHARE_NAME=Documents
+export SMB_USERNAME=user
+export SMB_PASSWORD=pass
+
+./server
+```
+
+#### Docker Compose with OpenTelemetry Collector
+
+```yaml
+version: '3.8'
+services:
+  smbrelay:
+    image: document-smbrelay:latest
+    ports:
+      - "8080:8080"
+    environment:
+      # SMB Configuration
+      SMB_SERVER_NAME: fileserver
+      SMB_SERVER_IP: 192.168.1.100
+      SMB_SHARE_NAME: Documents
+      SMB_USERNAME: user
+      SMB_PASSWORD: pass
+      
+      # OpenTelemetry - point to collector
+      OTEL_ENABLED: "true"
+      OTEL_SERVICE_NAME: document-smbrelay
+      OTEL_SERVICE_VERSION: 1.0.0
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4318
+      
+      # Logging
+      LOG_LEVEL: INFO
+    depends_on:
+      - otel-collector
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    ports:
+      - "4318:4318"  # OTLP HTTP receiver
+      - "4317:4317"  # OTLP gRPC receiver
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    environment:
+      APPLICATIONINSIGHTS_CONNECTION_STRING: "InstrumentationKey=xxx;IngestionEndpoint=https://uksouth-1.in.applicationinsights.azure.com/;LiveEndpoint=https://uksouth.livediagnostics.monitor.azure.com/;ApplicationId=xxx"
+```
+
+#### Why OpenTelemetry Collector is Required
+
+Azure Application Insights for Go applications does not have native OTLP HTTP support (unlike .NET, Java, Python, and Node.js which have official Azure Monitor exporters). The OpenTelemetry Collector acts as a bridge:
+
+1. **Your application** → sends OTLP data → **OpenTelemetry Collector**
+2. **OpenTelemetry Collector** → converts and sends data → **Azure Application Insights**
+
+This architecture provides:
+- ✅ Full OpenTelemetry compatibility
+- ✅ Azure Application Insights integration
+- ✅ Flexibility to add other exporters (Prometheus, Jaeger, etc.)
+- ✅ Data transformation and sampling capabilities
 
 ### Generic OTLP Backend
 
@@ -80,9 +175,9 @@ export OTEL_EXPORTER_OTLP_HEADERS="x-api-key=your-api-key"
 
 | Environment Variable | Description | Default | Required |
 |---------------------|-------------|---------|----------|
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Azure App Insights connection string | none | No |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Azure App Insights connection string (stored for reference only - requires OpenTelemetry Collector) | none | No |
 
-When this is set, it automatically enables OpenTelemetry and configures the OTLP endpoint.
+**Note**: Setting `APPLICATIONINSIGHTS_CONNECTION_STRING` alone will NOT enable telemetry. You must deploy an OpenTelemetry Collector and set `OTEL_EXPORTER_OTLP_ENDPOINT` to point to it. See the Azure Application Insights section below for setup instructions.
 
 ## Instrumentation Details
 
@@ -196,11 +291,17 @@ export SMB_PASSWORD=testpass
 
 Traces and metrics will be printed to stdout in JSON format.
 
-### Example 2: Azure Application Insights
+### Example 2: Azure Application Insights (via OpenTelemetry Collector)
 
 ```bash
-# Get your connection string from Azure Portal
-export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=your-key;IngestionEndpoint=https://region.applicationinsights.azure.com"
+# Deploy OpenTelemetry Collector first (see Azure Application Insights section above)
+
+# Enable telemetry
+export OTEL_ENABLED=true
+export OTEL_SERVICE_NAME=document-smbrelay
+
+# Point to OpenTelemetry Collector (NOT directly to Azure)
+export OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4318
 
 # Configure SMB
 export SMB_SERVER_NAME=fileserver
@@ -212,7 +313,7 @@ export SMB_PASSWORD=pass
 ./server
 ```
 
-Telemetry will be sent to Azure Application Insights. View traces and metrics in the Azure Portal.
+Telemetry will be sent to the OpenTelemetry Collector, which forwards it to Azure Application Insights. View traces and metrics in the Azure Portal.
 
 ### Example 3: Grafana Cloud
 
@@ -376,13 +477,51 @@ services:
 
 ### Azure Application Insights connection issues
 
-1. Verify connection string format:
-   ```
-   InstrumentationKey=xxx;IngestionEndpoint=https://xxx.applicationinsights.azure.com
-   ```
-2. Check that ingestion endpoint is accessible
-3. Verify API key/instrumentation key is valid
-4. Check Azure Portal for any service issues
+**Error**: `failed to upload metrics: failed to send metrics to https://uksouth-1.in.applicationinsights.azure.com/v1/metrics: 404 Not Found`
+
+**Cause**: You're trying to send OTLP data directly to Azure Application Insights, which is NOT supported for Go applications.
+
+**Solution**: 
+1. Deploy an OpenTelemetry Collector with Azure Monitor exporter (see configuration examples above)
+2. Set `OTEL_EXPORTER_OTLP_ENDPOINT` to point to your collector (e.g., `collector-host:4318`)
+3. Configure the collector with your `APPLICATIONINSIGHTS_CONNECTION_STRING`
+4. Remove or ignore any `APPLICATIONINSIGHTS_CONNECTION_STRING` from your application environment
+
+**Example fix**:
+```bash
+# Instead of this (WRONG - causes 404 errors):
+export APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=xxx;..."
+export OTEL_ENABLED=true
+./server
+
+# Do this (CORRECT - uses collector):
+export OTEL_ENABLED=true
+export OTEL_EXPORTER_OTLP_ENDPOINT=your-collector-host:4318
+./server
+```
+
+### Warning about Azure Application Insights without collector
+
+**Error**: `azure Application Insights requires OpenTelemetry Collector - set OTEL_EXPORTER_OTLP_ENDPOINT`
+
+**Cause**: You have `APPLICATIONINSIGHTS_CONNECTION_STRING` set but no `OTEL_EXPORTER_OTLP_ENDPOINT`.
+
+**Solution**: Deploy an OpenTelemetry Collector (see Azure Application Insights section above) and set `OTEL_EXPORTER_OTLP_ENDPOINT`.
+
+### Verifying OpenTelemetry Collector is working
+
+```bash
+# Check collector health
+curl http://collector-host:13133/
+
+# Check collector is receiving data (if logging exporter is enabled)
+docker logs otel-collector
+
+# Test sending sample data
+curl -X POST http://collector-host:4318/v1/traces \
+  -H "Content-Type: application/json" \
+  -d '{"resourceSpans":[]}'
+```
 
 ### High cardinality warnings
 
