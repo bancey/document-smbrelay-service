@@ -274,3 +274,151 @@ func TestBuildSmbClientArgs_IPAddressForcing(t *testing.T) {
 		t.Logf("Args: %v", args)
 	}
 }
+
+func TestIsIPAddress(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		// Valid IPv4 addresses
+		{"Valid IPv4", "192.168.1.1", true},
+		{"Valid IPv4 localhost", "127.0.0.1", true},
+		{"Valid IPv4 public", "8.8.8.8", true},
+		{"Valid IPv4 max", "255.255.255.255", true},
+
+		// Valid IPv6 addresses
+		{"Valid IPv6 full", "2001:0db8:85a3:0000:0000:8a2e:0370:7334", true},
+		{"Valid IPv6 compressed", "2001:db8:85a3::8a2e:370:7334", true},
+		{"Valid IPv6 localhost", "::1", true},
+		{"Valid IPv6 unspecified", "::", true},
+
+		// Invalid - hostnames
+		{"Hostname simple", "example.com", false},
+		{"Hostname subdomain", "smb.example.com", false},
+		{"Hostname with dash", "my-server.local", false},
+		{"Hostname DFS", "dfs.corp.example.com", false},
+
+		// Invalid - malformed IPs
+		{"Invalid IPv4 too many octets", "192.168.1.1.1", false},
+		{"Invalid IPv4 out of range", "256.1.1.1", false},
+		{"Invalid IPv4 letters", "192.168.a.1", false},
+		{"Invalid empty", "", false},
+		{"Invalid spaces", "192.168. 1.1", false},
+
+		// Edge cases
+		{"NetBIOS name", "FILESERVER", false},
+		{"IP with port", "192.168.1.1:445", false},
+		{"UNC path", "//192.168.1.1/share", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isIPAddress(tt.input)
+			if result != tt.expected {
+				t.Errorf("isIPAddress(%q) = %v, expected %v", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestBuildSmbClientArgs_HostnameWithoutIFlag(t *testing.T) {
+	// Test that -I flag is NOT used when ServerIP contains a hostname
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "smb.example.com", // Hostname, not IP
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	args, _, err := buildSmbClientArgs(cfg, "ls")
+	if err != nil {
+		t.Fatalf("buildSmbClientArgs failed: %v", err)
+	}
+
+	// Check that -I flag is NOT present
+	foundI := false
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "-I" {
+			foundI = true
+			break
+		}
+	}
+
+	if foundI {
+		t.Error("Expected NO -I flag when ServerIP contains a hostname (not an IP address)")
+		t.Logf("Args: %v", args)
+	}
+
+	// Check that the service name uses the hostname
+	if len(args) > 0 && args[0] != "//smb.example.com/testshare" {
+		t.Errorf("Expected service name '//smb.example.com/testshare', got '%s'", args[0])
+	}
+}
+
+func TestBuildSmbClientArgs_IPv6Address(t *testing.T) {
+	// Test that -I flag IS used with IPv6 addresses
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "2001:db8::1", // IPv6 address
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	args, _, err := buildSmbClientArgs(cfg, "ls")
+	if err != nil {
+		t.Fatalf("buildSmbClientArgs failed: %v", err)
+	}
+
+	// Check that -I flag is present with the IPv6 address
+	foundI := false
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "-I" && args[i+1] == cfg.ServerIP {
+			foundI = true
+			break
+		}
+	}
+
+	if !foundI {
+		t.Error("Expected -I flag with IPv6 address to force direct IP connection")
+		t.Logf("Args: %v", args)
+	}
+}
+
+func TestBuildSmbClientArgs_DFSHostname(t *testing.T) {
+	// Test DFS hostname scenario - should NOT use -I flag
+	cfg := &config.SMBConfig{
+		ServerName:   "dfs-server",
+		ServerIP:     "dfs.corp.example.com", // DFS namespace hostname
+		ShareName:    "documents",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "negotiate",
+	}
+
+	args, _, err := buildSmbClientArgs(cfg, "ls")
+	if err != nil {
+		t.Fatalf("buildSmbClientArgs failed: %v", err)
+	}
+
+	// Check that -I flag is NOT present for DFS hostname
+	foundI := false
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "-I" {
+			foundI = true
+			break
+		}
+	}
+
+	if foundI {
+		t.Error("Expected NO -I flag for DFS hostname to allow proper DFS referral handling")
+		t.Logf("Args: %v", args)
+	}
+}

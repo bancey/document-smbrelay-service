@@ -105,7 +105,7 @@ func UploadHandler(c *fiber.Ctx) error {
 	file, err := c.FormFile("file")
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"detail": "file is required",
+			"detail": "wfile is required",
 		})
 	}
 

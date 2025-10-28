@@ -244,7 +244,7 @@ sudo tcpdump -i any port 445 or port 139
 # You should see only port 445 traffic, no port 139
 ```
 
-**Note:** Both `SMB_SERVER_NAME` and `SMB_SERVER_IP` should be set to ensure optimal direct IP connection. The service will use the IP address for connection and the server name for authentication context.
+**Note:** Both `SMB_SERVER_NAME` and `SMB_SERVER_IP` should be set for optimal configuration. When `SMB_SERVER_IP` contains an actual IP address (not a hostname), the service uses smbclient's `-I` flag to force direct IP connection, bypassing name resolution. When `SMB_SERVER_IP` contains a hostname (e.g., `dfs.corp.example.com`), the service performs standard DNS resolution without the `-I` flag, which is important for DFS shares that require proper name resolution for referral handling.
 
 ## Base Path Configuration
 

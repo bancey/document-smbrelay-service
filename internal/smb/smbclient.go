@@ -3,6 +3,7 @@ package smb
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,6 +76,12 @@ func validateBinaryPath(path string) bool {
 	}
 
 	return true
+}
+
+// isIPAddress checks if a string is a valid IP address (IPv4 or IPv6)
+func isIPAddress(host string) bool {
+	// net.ParseIP returns nil if the string is not a valid IP address
+	return net.ParseIP(host) != nil
 }
 
 // sanitizeArgsForLogging replaces sensitive data in args for safe logging
@@ -208,8 +215,9 @@ func buildSmbClientArgs(cfg *config.SMBConfig, command string) ([]string, map[st
 	service := fmt.Sprintf("//%s/%s", server, cfg.ShareName)
 	args = append(args, service)
 
-	// Add IP address if specified
-	if cfg.ServerIP != "" && cfg.ServerName != "" {
+	// Add IP address if specified and ServerIP is actually an IP address (not a hostname)
+	// The -I flag is specifically for IP addresses and should not be used with hostnames
+	if cfg.ServerIP != "" && cfg.ServerName != "" && isIPAddress(cfg.ServerIP) {
 		args = append(args, "-I", cfg.ServerIP)
 	}
 
