@@ -213,6 +213,11 @@ func buildSmbClientArgs(cfg *config.SMBConfig, command string) ([]string, map[st
 		args = append(args, "-I", cfg.ServerIP)
 	}
 
+	// Force DNS-only name resolution to avoid NetBIOS (port 139) traffic
+	// This ensures smbclient uses direct TCP/IP connection on port 445
+	// Name resolve order: host = DNS lookup only, no NetBIOS/WINS
+	args = append(args, "-R", "host")
+
 	// Add port if not default
 	if cfg.Port != 445 {
 		args = append(args, "-p", fmt.Sprintf("%d", cfg.Port))

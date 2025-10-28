@@ -647,13 +647,6 @@ func TestUploadHandler_TempFileCleanup(_ *testing.T) {
 	// The defer os.Remove(tmpPath) should have been called
 }
 
-// Test health endpoint returns correct JSON fields
-func TestHealthHandler_JSONStructure(t *testing.T) {
-	// Skip this test as it's redundant with TestHealthHandler_WithConfig
-	// which already validates JSON structure without attempting real SMB connections
-	t.Skip("Skipping redundant test - JSON structure validated in TestHealthHandler_WithConfig")
-}
-
 // ============================================================================
 // List Handler Tests
 // ============================================================================

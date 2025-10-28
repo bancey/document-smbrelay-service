@@ -3,6 +3,8 @@ package smb
 import (
 	"os"
 	"testing"
+
+	"github.com/bancey/document-smbrelay-service/internal/config"
 )
 
 func TestValidateBinaryPath_ValidExecutable(t *testing.T) {
@@ -206,5 +208,69 @@ func TestSanitizeArgsForLogging(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestBuildSmbClientArgs_NameResolutionOrder(t *testing.T) {
+	// Test that buildSmbClientArgs includes -R host to force DNS-only name resolution
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	args, _, err := buildSmbClientArgs(cfg, "ls")
+	if err != nil {
+		t.Fatalf("buildSmbClientArgs failed: %v", err)
+	}
+
+	// Check that -R host is present to force DNS-only resolution (no NetBIOS)
+	foundR := false
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "-R" && args[i+1] == "host" {
+			foundR = true
+			break
+		}
+	}
+
+	if !foundR {
+		t.Error("Expected -R host flag to force DNS-only name resolution and avoid NetBIOS (port 139) traffic")
+		t.Logf("Args: %v", args)
+	}
+}
+
+func TestBuildSmbClientArgs_IPAddressForcing(t *testing.T) {
+	// Test that -I flag is used when both ServerName and ServerIP are specified
+	cfg := &config.SMBConfig{
+		ServerName:   "testserver",
+		ServerIP:     "192.168.1.100",
+		ShareName:    "testshare",
+		Username:     "testuser",
+		Password:     "testpass",
+		Port:         445,
+		AuthProtocol: "ntlm",
+	}
+
+	args, _, err := buildSmbClientArgs(cfg, "ls")
+	if err != nil {
+		t.Fatalf("buildSmbClientArgs failed: %v", err)
+	}
+
+	// Check that -I flag is present with the IP address
+	foundI := false
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "-I" && args[i+1] == cfg.ServerIP {
+			foundI = true
+			break
+		}
+	}
+
+	if !foundI {
+		t.Error("Expected -I flag with IP address to force direct IP connection")
+		t.Logf("Args: %v", args)
 	}
 }

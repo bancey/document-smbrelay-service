@@ -211,6 +211,41 @@ export SMB_PASSWORD=mypassword
 
 See [DFS_TESTING.md](DFS_TESTING.md) for more details.
 
+## Network Protocol and Port Usage
+
+This service uses **direct TCP/IP SMB connections over port 445** and explicitly disables NetBIOS name resolution to avoid legacy NetBIOS-over-TCP traffic on port 139.
+
+### Port Information
+
+- **Port 445**: Direct SMB over TCP/IP (modern, DNS-based) - **Used by this service**
+- **Port 139**: NetBIOS-over-TCP (legacy SMB/CIFS) - **Explicitly disabled**
+
+### How It Works
+
+The service configures `smbclient` to:
+1. Use DNS-only name resolution (`-R host` flag)
+2. Connect directly to the specified IP address
+3. Bypass NetBIOS name lookup and WINS queries
+
+This ensures:
+- ✅ Faster connections (no NetBIOS name lookup overhead)
+- ✅ More secure (direct TCP connections)
+- ✅ Better compatibility with modern networks
+- ✅ No port 139 traffic
+
+### Verifying the Connection
+
+You can verify the service is using port 445 by monitoring network traffic:
+
+```bash
+# Monitor SMB connections
+sudo tcpdump -i any port 445 or port 139
+
+# You should see only port 445 traffic, no port 139
+```
+
+**Note:** Both `SMB_SERVER_NAME` and `SMB_SERVER_IP` should be set to ensure optimal direct IP connection. The service will use the IP address for connection and the server name for authentication context.
+
 ## Base Path Configuration
 
 You can configure the service to operate within a specific subdirectory of an SMB share using the `SMB_BASE_PATH` environment variable. This is useful when you want to restrict file operations to a specific folder.
@@ -730,6 +765,7 @@ make clean
 - **[DFS_TESTING.md](DFS_TESTING.md)** - DFS testing guide
 - **[DOCKER_TESTING.md](DOCKER_TESTING.md)** - Docker testing guide
 - **[DOCKER_IMAGES.md](DOCKER_IMAGES.md)** - Docker image variants (standard vs debug)
+- **[docs/NETBIOS_VS_DIRECT_SMB.md](docs/NETBIOS_VS_DIRECT_SMB.md)** - NetBIOS vs Direct SMB (port 139 vs 445)
 
 ## Contributing
 
