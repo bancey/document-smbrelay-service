@@ -76,7 +76,7 @@ func TestTestBasePath_EmptyPath(t *testing.T) {
 
 	// Setup mock that succeeds
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "success", nil
 	}
 	smbClientExec = mock
@@ -105,7 +105,7 @@ func TestTestBasePath_DotPath(t *testing.T) {
 
 	// Setup mock that succeeds
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "success", nil
 	}
 	smbClientExec = mock
@@ -134,7 +134,7 @@ func TestTestBasePath_ObjectNameNotFound(t *testing.T) {
 
 	// Setup mock that returns path not found error
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "NT_STATUS_OBJECT_NAME_NOT_FOUND", fmt.Errorf("path not found")
 	}
 	smbClientExec = mock
@@ -166,7 +166,7 @@ func TestTestBasePath_ObjectPathNotFound(t *testing.T) {
 
 	// Setup mock that returns object path not found error
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "NT_STATUS_OBJECT_PATH_NOT_FOUND", fmt.Errorf("path not found")
 	}
 	smbClientExec = mock
@@ -198,7 +198,7 @@ func TestTestBasePath_AccessDenied(t *testing.T) {
 
 	// Setup mock that returns access denied error
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "NT_STATUS_ACCESS_DENIED", fmt.Errorf("access denied")
 	}
 	smbClientExec = mock
@@ -230,7 +230,7 @@ func TestTestBasePath_GenericError(t *testing.T) {
 
 	// Setup mock that returns generic error
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "Generic error message", fmt.Errorf("some error")
 	}
 	smbClientExec = mock
@@ -262,7 +262,7 @@ func TestTestConnection_BadNetworkName(t *testing.T) {
 
 	// Setup mock that returns bad network name error
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "NT_STATUS_BAD_NETWORK_NAME", fmt.Errorf("bad network name")
 	}
 	smbClientExec = mock
@@ -293,7 +293,7 @@ func TestTestConnection_InvalidParameter(t *testing.T) {
 
 	// Setup mock that returns invalid parameter error
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "NT_STATUS_INVALID_PARAMETER", fmt.Errorf("invalid parameter")
 	}
 	smbClientExec = mock
@@ -324,7 +324,7 @@ func TestTestConnection_ConnectionRefused(t *testing.T) {
 
 	// Setup mock that returns connection refused error
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "Connection refused", fmt.Errorf("connection refused")
 	}
 	smbClientExec = mock
@@ -355,7 +355,7 @@ func TestTestConnection_FailedToConnect(t *testing.T) {
 
 	// Setup mock that returns failed to connect error
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "failed to connect", fmt.Errorf("failed to connect")
 	}
 	smbClientExec = mock
@@ -395,7 +395,7 @@ func TestUploadFileViaSmbClient_ObjectNameCollision(t *testing.T) {
 
 	// Setup mock that returns object name collision error
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "NT_STATUS_OBJECT_NAME_COLLISION", fmt.Errorf("file exists")
 	}
 	smbClientExec = mock
@@ -435,7 +435,7 @@ func TestUploadFileViaSmbClient_AccessDenied(t *testing.T) {
 
 	// Setup mock that returns access denied error
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "NT_STATUS_ACCESS_DENIED", fmt.Errorf("access denied")
 	}
 	smbClientExec = mock
@@ -475,7 +475,7 @@ func TestUploadFileViaSmbClient_ObjectPathNotFound(t *testing.T) {
 
 	// Setup mock that returns object path not found error
 	mock := NewMockExecutor()
-	mock.ExecuteFunc = func(args []string) (string, error) {
+	mock.ExecuteFunc = func(_ []string) (string, error) {
 		return "NT_STATUS_OBJECT_PATH_NOT_FOUND", fmt.Errorf("path not found")
 	}
 	smbClientExec = mock

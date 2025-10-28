@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const mockStatusAccessDenied = "NT_STATUS_ACCESS_DENIED"
+
 // MockSmbClientExecutor is a mock implementation for testing
 type MockSmbClientExecutor struct {
 	// ExecuteFunc allows tests to define custom behavior
@@ -86,7 +88,7 @@ func SetupFailureMock(errorType string) *MockSmbClientExecutor {
 			case "share_not_found":
 				return "tree connect failed: NT_STATUS_BAD_NETWORK_NAME", fmt.Errorf("smbclient command failed: exit status 1")
 			case "access_denied":
-				return "NT_STATUS_ACCESS_DENIED", fmt.Errorf("smbclient command failed: exit status 1")
+				return mockStatusAccessDenied, fmt.Errorf("smbclient command failed: exit status 1")
 			case "file_exists":
 				return "NT_STATUS_OBJECT_NAME_COLLISION", fmt.Errorf("smbclient command failed: exit status 1")
 			default:

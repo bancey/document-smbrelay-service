@@ -148,7 +148,7 @@ func TestAssertFalse_Failure(t *testing.T) {
 func TestAssertNil_Success(t *testing.T) {
 	mockT := &testing.T{}
 
-	var nilValue error = nil
+	var nilValue error
 	AssertNil(mockT, nilValue)
 
 	if mockT.Failed() {
