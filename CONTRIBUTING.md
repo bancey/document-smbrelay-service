@@ -17,12 +17,15 @@ Thank you for your interest in contributing to the Document SMB Relay Service! W
 
 ## Code of Conduct
 
-By participating in this project, you agree to maintain a respectful and inclusive environment. We expect all contributors to:
+This project adheres to the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please read the full [Code of Conduct](CODE_OF_CONDUCT.md) for details on our community standards and reporting procedures.
+
+In summary, we expect all contributors to:
 
 - Be respectful and considerate in communication
 - Welcome newcomers and help them get started
 - Focus on constructive feedback
 - Respect differing viewpoints and experiences
+- Follow the guidelines in our [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## Getting Started
 
@@ -94,6 +97,12 @@ make run
 
 ## How to Contribute
 
+### Reporting Security Vulnerabilities
+
+**Do not report security vulnerabilities through public GitHub issues.** 
+
+If you discover a security vulnerability, please follow the process outlined in our [Security Policy](SECURITY.md). We take security seriously and will respond promptly to any reports.
+
 ### Reporting Bugs
 
 If you find a bug, please create an issue using the **Bug Report** template. Include:
@@ -112,6 +121,15 @@ For feature requests, use the **Feature Request** template. Include:
 - Use case and motivation
 - Potential implementation approach (if applicable)
 - Any alternatives you've considered
+
+### Improving Documentation
+
+Help us improve our documentation by using the **Documentation Improvement** template. Include:
+
+- Which documentation needs improvement
+- What should be added or clarified
+- Why this matters to users
+- Examples or references (if applicable)
 
 ### Contributing Code
 
