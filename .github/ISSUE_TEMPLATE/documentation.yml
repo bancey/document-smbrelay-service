@@ -1,0 +1,126 @@
+name: 📚 Documentation Improvement
+description: Suggest improvements to documentation
+title: "[Docs]: "
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve our documentation! Clear documentation helps everyone use the service more effectively.
+
+  - type: dropdown
+    id: doc-type
+    attributes:
+      label: Documentation Type
+      description: What type of documentation needs improvement?
+      options:
+        - README.md
+        - CONTRIBUTING.md
+        - QUICKSTART.md
+        - API Documentation (/docs endpoint)
+        - Code comments
+        - Configuration guide
+        - Deployment guide
+        - Troubleshooting guide
+        - Architecture/Design docs
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-state
+    attributes:
+      label: Current State
+      description: What is currently documented (if anything)?
+      placeholder: |
+        The current documentation says...
+        Or: This topic is not currently documented.
+    validations:
+      required: true
+
+  - type: textarea
+    id: improvement
+    attributes:
+      label: Suggested Improvement
+      description: What should be added, changed, or clarified?
+      placeholder: |
+        The documentation should include...
+        This section should be clarified by...
+        Add examples showing...
+    validations:
+      required: true
+
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Why This Matters
+      description: Why is this improvement important?
+      placeholder: |
+        This would help users to...
+        I was confused about...
+        New users might not understand...
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples or References
+      description: Any examples, screenshots, or references that would help?
+      placeholder: |
+        Example code:
+        ```bash
+        # Example command that should be documented
+        ```
+        
+        Similar documentation from other projects:
+        - [Project X](https://example.com)
+
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Target Audience
+      description: Who is the primary audience for this documentation?
+      options:
+        - New users getting started
+        - Developers contributing code
+        - System administrators deploying
+        - API consumers integrating
+        - Security/compliance teams
+        - Everyone
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected-sections
+    attributes:
+      label: Affected Documentation Sections
+      description: Which files or sections would need to be updated?
+      placeholder: |
+        - README.md - Quick Start section
+        - CONTRIBUTING.md - Testing guidelines
+        - Code comments in internal/smb/operations.go
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      description: Would you like to contribute this improvement?
+      options:
+        - label: I would like to submit a PR with this documentation improvement
+          required: false
+        - label: I need help writing this documentation
+          required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-submission Checklist
+      description: Please verify the following
+      options:
+        - label: I have searched for existing documentation issues
+          required: true
+        - label: I have checked that this isn't already documented elsewhere
+          required: true
+        - label: This improvement would benefit other users
+          required: true
