@@ -73,7 +73,7 @@ jobs:
           go tool cover -html=coverage.out -o coverage.html
 
       - name: SonarCloud Scan
-        uses: SonarSource/sonarqube-scan-action@v6.0.0
+        uses: SonarSource/sonarqube-scan-action@v7.2.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
