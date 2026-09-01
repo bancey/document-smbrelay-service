@@ -2,7 +2,7 @@ module github.com/bancey/document-smbrelay-service
 
 go 1.23.0
 
-toolchain go1.24.9
+toolchain go1.27.1
 
 require (
 	github.com/gofiber/fiber/v2 v2.52.9
